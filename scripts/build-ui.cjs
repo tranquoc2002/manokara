@@ -25,8 +25,6 @@ for (const [, filename] of css.matchAll(/\.\/files\/([^)'"\s]+)/g)) {
   fs.copyFileSync(path.join(font, 'files', filename), path.join(ui, filename));
 }
 fs.writeFileSync(path.join(ui, 'geist.css'), css.replaceAll('./files/', './'));
-fs.writeFileSync(path.join(ui, 'mark.svg'),
-  fs.readFileSync(path.join(icons, 'assets/regular/cactus.svg'), 'utf8').replace('fill="currentColor"', 'fill="#35674f"'));
 fs.writeFileSync(path.join(ui, 'NOTICES.txt'),
   'Manokara controller assets\n\nPhosphor Icons 2.1.1\nhttps://github.com/phosphor-icons/core\n\n' +
   fs.readFileSync(path.join(icons, 'LICENSE'), 'utf8') +
