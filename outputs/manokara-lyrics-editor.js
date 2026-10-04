@@ -5,7 +5,9 @@
   function create({imported=()=>{},changed=()=>{}}={}) {
     const source=$('#llrc'), preview=$('#romajiLrc'), selector=$('#lyricMode'), status=$('#lyricsStatus');
     let draftSource='',epoch=0,worker=null,pending=null,fileEpoch=0;
-    const setStatus=(text,error=false)=>{status.textContent=text;status.classList.toggle('error',error)};
+    let statusSource='';
+    const setStatus=(text,error=false)=>{statusSource=text;status.textContent=globalThis.ManokaraI18n?.text(text)||text;status.classList.toggle('error',error)};
+    window.addEventListener('manokara:languagechange',()=>{status.textContent=globalThis.ManokaraI18n?.text(statusSource)||statusSource});
     function availability() {
       const valid=!!preview.value&&draftSource===source.value&&!L.alignmentError(source.value,preview.value);
       for(const option of selector.options)option.disabled=option.value!=='original'&&!valid;

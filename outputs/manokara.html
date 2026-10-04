@@ -9,12 +9,15 @@
 <link rel="preload" href="./ui-assets/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="./ui-assets/geist.css">
 <link rel="stylesheet" href="./manokara-ui.css">
+<link rel="stylesheet" href="./manokara-tour.css">
 </head>
 <body>
 <a class="skip-link" href="#grid">Skip to studio</a>
 <header class="app-header">
   <div class="brand"><div class="brand-mark"><span data-icon="cactus" aria-hidden="true"></span></div><h1>manokara</h1></div>
   <div class="header-actions">
+    <label class="language-control"><select id="language" aria-label="Interface language"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
+    <button class="s" id="help" title="Open the guided tour" aria-haspopup="dialog"><span class="help-symbol" aria-hidden="true">?</span><span>Help</span></button>
     <div class="connection"><span data-icon="broadcast" aria-hidden="true"></span><span id="relayStatus" role="status">Connecting to OBS…</span></div>
     <button class="s" id="transpose" title="Pitch and speed with Transpose"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>Transpose</span></button>
     <button class="s" id="theme" title="Switch between light and dark theme" aria-label="Switch color theme"><span data-icon="circle-half" aria-hidden="true"></span><span>Theme</span></button>
@@ -88,16 +91,20 @@
 </main>
 <footer class="app-footer"><span>Sing your way. Your setlist, your room.</span><details><summary>Credits &amp; licenses<span data-icon="caret-right" aria-hidden="true"></span></summary><div class="credits-links"><a href="/sources/FOLIA-MAJOR-NOTICE.txt">Folia notices</a><a href="/sources/FOLIA-MAJOR-SOURCE.zip">Folia source</a><a href="/sources/FOLIA-INTEGRATION-SOURCE/manokara-folia.tsx">Integration source</a><a href="/sources/JIZURA-LICENSE.txt">JIZURA license</a><a href="/romaji-assets/NOTICES.txt">Romaji notices</a><a href="/ui-assets/NOTICES.txt">Interface fonts &amp; icons</a></div></details></footer>
 
+<script src="./manokara-i18n.js"></script>
+<script src="./manokara-tour.js"></script>
 <script src="./manokara-core.js"></script>
 <script src="./manokara-audio.js"></script>
 <script src="./manokara-lyrics.js"></script>
 <script src="./manokara-lyrics-editor.js"></script>
 <script src="./manokara-session.js"></script>
 <script>
+const uiText=ManokaraI18n.text,uiMarkup=ManokaraI18n.markup;
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const icon=name=>'<svg class="icon" aria-hidden="true"><use href="./manokara-icons.svg#'+name+'"></use></svg>';
 document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
-const stageEmpty=$('#stage').innerHTML;
+const stageEmptySource=$('#stage').innerHTML;
+const stageEmpty=()=>ManokaraI18n.html(stageEmptySource);
 function updateWorkspaceScroll(){const panel=document.querySelector('.tabpanel:not([hidden])');document.querySelector('.workspace-hint').hidden=!panel||panel.scrollHeight<=panel.clientHeight+panel.scrollTop+12}
 function showStudioTab(name){
  const song=name==='song';$('#panel-song').hidden=!song;$('#panel-green').hidden=song;
@@ -116,6 +123,7 @@ const fmt=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padSta
 const tp=ManokaraCore.timeValue;
 let items=[],ci=null,pos=0,last=-1,mode='',counting=false,cdLeft=0,cdLast=0,cdT,fbPend=null,tick,dur=null,media=null,yt=null,ytOk=false,tok=0,paused=false,acc=0,runAt=null,edit=-1,res=[];
 let mediaLookup=null,mediaStart=0;
+let searchState='',transposeMessage='';
 let generatedTitle='';const youtubeTitles=new Map();
 try{const saved=JSON.parse(localStorage.getItem('kpt2')||'[]');if(Array.isArray(saved))items=saved.filter(it=>it&&typeof it==='object'&&(it.mc||typeof it.url==='string')).map(it=>{
  const number=(v,otherwise=0)=>Number.isFinite(Number(v))?Number(v):otherwise;
@@ -123,7 +131,8 @@ try{const saved=JSON.parse(localStorage.getItem('kpt2')||'[]');if(Array.isArray(
 })}catch(e){}
 let timelineVersion=Date.now();
 const save=()=>{try{localStorage.setItem('kpt2',JSON.stringify(items,(k,v)=>k==='_L'?undefined:v));return true}catch(e){msg('Browser storage is full or unavailable. Changes remain in this window only.');return false}};
-const msg=t=>$('#msg').textContent=t||'';
+let messageSource='';
+const msg=value=>{messageSource=value||'';$('#msg').textContent=uiText(messageSource)};
 const lyricEditor=ManokaraLyricsEditor.create({imported(metadata){pickDur=metadata.duration;if(!$('#ttl').value&&metadata.title)$('#ttl').value=metadata.title.slice(0,512);if(!$('#lq').value)$('#lq').value=[metadata.title,metadata.artist].filter(Boolean).join(' ')},changed(){pickDur=undefined}});
 const relayPageId=(()=>{try{return crypto.randomUUID()}catch(e){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}})();
 let relayRoom='',relayInitialized=false;
@@ -132,8 +141,8 @@ const relayUrl=path=>{const url=new URL(path,location.href);url.searchParams.set
 async function relayServerAction(action){try{await relayReady;return await window.ManokaraSession.api(relayUrl('/__lyric-owner'),{writerId:relayPageId,action},{keepalive:action==='release'})}catch(e){return undefined}}
 let claimPending=false,lastClaim=-Infinity;
 function takeRelayOwnership(){if(claimPending||performance.now()-lastClaim<750)return;lastClaim=performance.now();claimPending=true;relayServerAction('claim').then(r=>{if(r?.ok){relayUp=null;publishObsState()}}).finally(()=>{claimPending=false})}
-document.addEventListener('pointerdown',takeRelayOwnership,true);
-document.addEventListener('keydown',takeRelayOwnership,true);
+document.addEventListener('pointerdown',event=>{if(!ManokaraTour.active&&!event.target.closest('#help'))takeRelayOwnership()},true);
+document.addEventListener('keydown',event=>{if(!ManokaraTour.active&&!event.target.closest('#help'))takeRelayOwnership()},true);
 window.addEventListener('pagehide',()=>relayServerAction('release'));
 if(location.protocol==='file:')$('#warn').hidden=false;
 function lyricDuration(it){return it.e!=null?Math.max(0,it.e-(it.s||0)):(it.mediaDuration||it.ldur||180)}
@@ -165,8 +174,8 @@ const idx=()=>ci?items.indexOf(ci):-1;
 const nxt=()=>{if(!ci)return 0;const k=idx();return k>=0?k+1:pos};
 const prv=()=>{if(!ci)return 0;const k=idx();return Math.max(0,(k>=0?k:pos)-1)};
 const cdv=()=>Math.max(0,Math.min(30,Math.floor(+$('#cdn').value)||0));
-function setPauseUI(p){paused=p;$('#pause').innerHTML=icon(p?'play':'pause')+'<span>'+(p?'Resume':'Pause')+'</span>';updatePlaybackState()}
-function updatePlaybackState(){const el=$('#playbackState');const state=!ci?'ready':counting?'countdown':paused?'paused':mediaPlaying()?'playing':'ready';el.dataset.state=state;el.textContent=({ready:ci?'Ready':'Ready when you are',countdown:'Starting soon',paused:'Paused',playing:'Playing'})[state]}
+function setPauseUI(p){paused=p;$('#pause').innerHTML=icon(p?'play':'pause')+'<span>'+(p?uiText('Resume'):uiText('Pause'))+'</span>';updatePlaybackState()}
+function updatePlaybackState(){const el=$('#playbackState');const state=!ci?'ready':counting?'countdown':paused?'paused':mediaPlaying()?'playing':'ready';el.dataset.state=state;el.textContent=({ready:ci?uiText('Ready'):uiText('Ready when you are'),countdown:uiText('Starting soon'),paused:uiText('Paused'),playing:uiText('Playing')})[state]}
 function mediaPlaying(){if(!ci||ci.mc||counting||paused)return false;if(mode==='media')return !!media&&!media.paused&&!media.ended&&media.readyState>=2;if(mode==='yt'){try{return ytOk&&yt.getPlayerState()===1}catch(e){return false}}return runAt!=null}
 function playMedia(){if(media)media.play().catch(()=>{setPauseUI(true);msg('Playback was blocked. Press Play to start the media.')})}
 const clkEl=()=>acc+(runAt!=null?(Date.now()-runAt)/1000:0);
@@ -176,9 +185,9 @@ function loadYT(){if(window.YT&&YT.Player)return Promise.resolve(true);
   setTimeout(()=>r(false),8000)})}
 function ovShow(){let o=$('#ov');if(!counting||!ci){if(o)o.remove();return}
  if(!o){o=document.createElement('div');o.id='ov';$('#stage').appendChild(o)}
- o.innerHTML='<b>'+esc(ci.title)+'</b><span>'+Math.max(1,Math.ceil(cdLeft))+'</span><small>Press Play to start now</small>'}
+ o.innerHTML='<b>'+esc(ci.title)+'</b><span>'+Math.max(1,Math.ceil(cdLeft))+uiMarkup('</span><small>Press Play to start now</small>')}
 function clearAll(){clearInterval(tick);clearInterval(cdT);tok++;timelineVersion++;counting=false;fbPend=null;mediaLookup?.abort();mediaLookup=null;if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;if(media){try{media.pause();media.removeAttribute('src');media.load()}catch(e){}}media=null;mediaStart=0;runAt=null;acc=0;
- $('#stage').innerHTML=stageEmpty;$('#time').textContent='00:00 / 00:00';$('#yt').hidden=true;setPauseUI(false)}
+ $('#stage').innerHTML=stageEmpty();$('#time').textContent='00:00 / 00:00';$('#yt').hidden=true;setPauseUI(false)}
 function endCount(my){if(my!==tok||!counting)return;counting=false;setPauseUI(false);clearInterval(cdT);ovShow();
  if(fbPend){const f=fbPend;fbPend=null;fbFrame(f[0],f[1]);return}
  if(media)playMedia();else if(mode==='yt'&&yt&&ytOk)yt.playVideo()}
@@ -216,21 +225,21 @@ function startYT(id,it,my){$('#stage').innerHTML='<div id="ytp"></div>';
    onStateChange:e=>{if(my!==tok||counting)return;if(e.data===0)go(nxt());else if(e.data===1){takeRelayOwnership();setPauseUI(false)}else if(e.data===2)setPauseUI(true)},
    onError:e=>{if(my!==tok)return;const code=Number(e?.data);if([5,101,150].includes(code)){startServerVideo(id,it,my);return}const reason=({2:'Invalid video ID or URL.',100:'Video is unavailable, private, or has been removed.',153:'YouTube did not receive a referrer/client identity. Open Manokara from localhost or HTTPS, not file://.'})[code]||'YouTube could not play this video.';playbackFailure(`YouTube error ${code||'unknown'}: ${reason}`,my)}}})})}
 function go(i){takeRelayOwnership();clearAll();pk='';
- if(i<0||i>=items.length){if(ci){const k=idx();last=k>=0?k:pos}if(i>=items.length)last=-1;ci=null;mode='';$('#now').textContent='Nothing playing yet';render();updPan();updatePlaybackState();if(i>=items.length)msg('Setlist finished. Ready for another song?');return}
- ci=items[i];pos=i;last=i;const it=ci,st=$('#stage'),my=tok;render();msg('');$('#now').textContent=it.mc?'MC break':it.title;dur=null;acc=0;runAt=null;
+ if(i<0||i>=items.length){if(ci){const k=idx();last=k>=0?k:pos}if(i>=items.length)last=-1;ci=null;mode='';$('#now').textContent=uiText('Nothing playing yet');render();updPan();updatePlaybackState();if(i>=items.length)msg('Setlist finished. Ready for another song?');return}
+ ci=items[i];pos=i;last=i;const it=ci,st=$('#stage'),my=tok;render();msg('');$('#now').textContent=it.mc?uiText('MC break'):it.title;dur=null;acc=0;runAt=null;
  fetchSongTitle(it);
  const id=it.mc?null:yid(it.url),isM=!it.mc&&!id&&/\.(mp4|mp3|wav|ogg|m4a|aac|flac)(\?|$)/i.test(it.url),n=(id||isM)?cdv():0;
  if(n>0){counting=true;cdLeft=n;cdLast=Date.now()}
- if(it.mc){mode='clk';runAt=Date.now();st.innerHTML='<div class="stage-empty mc-stage"><div class="stage-glyph">'+icon('microphone-stage')+'</div><h2>MC break</h2><p>'+esc(it.memo||'Take a moment between songs.')+'</p></div>';dur=it.dur}
+ if(it.mc){mode='clk';runAt=Date.now();st.innerHTML='<div class="stage-empty mc-stage"><div class="stage-glyph">'+icon('microphone-stage')+uiMarkup('</div><h2>MC break</h2><p>')+esc(it.memo||uiText('Take a moment between songs.'))+'</p></div>';dur=it.dur}
  else{dur=it.e!=null?it.e-(it.s||0):null;
   if(id){mode='yt';$('#yt').href='https://www.youtube.com/watch?v='+id+'&t='+Math.floor(it.s||0);$('#yt').hidden=false;startYT(id,it,my)}
   else if(isM){mode='media';mediaStart=it.s||0;const el=document.createElement('video');el.src=it.url;el.controls=true;el.autoplay=!counting;el.volume=$('#vol').value/100;
    el.onloadedmetadata=()=>{if(my!==tok)return;it.mediaDuration=Number.isFinite(el.duration)?Math.max(0,el.duration-(it.s||0)):undefined;el.currentTime=it.s||0};el.onseeked=()=>{timelineVersion++};el.onended=()=>go(nxt());el.onplay=()=>setPauseUI(false);el.onpause=()=>{if(!counting)setPauseUI(true)};
    el.onerror=()=>{msg('Could not load this media.');if($('#skip').checked)setTimeout(()=>{if(my===tok)go(nxt())},1500)};st.innerHTML='';st.appendChild(el);media=el}
-  else{mode='clk';runAt=Date.now();st.innerHTML='<div class="stage-empty"><div class="stage-glyph">'+icon('link')+'</div><h2>Open this link to play.</h2><p>This media opens in a new tab. Your lyric clock is running here.</p><a class="stage-add" href="'+esc(it.url)+'" target="_blank" rel="noopener">Open media '+icon('arrow-up-right')+'</a></div>'}}
- if(counting){ovShow();$('#time').textContent='Starting in '+n+' s';
+  else{mode='clk';runAt=Date.now();st.innerHTML='<div class="stage-empty"><div class="stage-glyph">'+icon('link')+uiMarkup('</div><h2>Open this link to play.</h2><p>This media opens in a new tab. Your lyric clock is running here.</p><a class="stage-add" href="')+esc(it.url)+'" target="_blank" rel="noopener">'+uiText('Open media ')+icon('arrow-up-right')+'</a></div>'}}
+ if(counting){ovShow();$('#time').textContent=uiText('Starting in ')+n+' s';
   cdT=setInterval(()=>{if(my!==tok){clearInterval(cdT);return}const now=Date.now();if(!paused)cdLeft-=(now-cdLast)/1000;cdLast=now;
-   if(cdLeft<=0){endCount(my);return}ovShow();$('#time').textContent='Starting in '+Math.ceil(cdLeft)+' s'},100)}
+   if(cdLeft<=0){endCount(my);return}ovShow();$('#time').textContent=uiText('Starting in ')+Math.ceil(cdLeft)+' s'},100)}
  tick=setInterval(()=>{updatePlaybackState();if(counting)return;const e=elapsed();if(dur!=null&&e>=dur){go(nxt());return}$('#time').textContent=fmt(e)+' / '+(dur!=null?fmt(dur):'--:--')},250);
  updPan()}
 function elapsed(){const it=ci;if(!it||counting)return 0;
@@ -238,12 +247,12 @@ function elapsed(){const it=ci;if(!it||counting)return 0;
  if(mode==='yt'){if(!yt||!ytOk)return 0;try{return yt.getCurrentTime()-(it.s||0)}catch(e){return 0}}
  return clkEl()}
 function render(){showOff();$('#setlistCount').textContent=items.length;$('#setlistEmpty').hidden=items.length>0;$('#clr').disabled=!items.length;
- $('#list').innerHTML=items.map((it,i)=>{const title=it.mc?'MC break · '+(it.memo||'Announcement'):it.title,duration=it.mc?it.dur:it.e!=null?it.e-(it.s||0):it.mediaDuration,kind=it.mc?'MC break':yid(it.url)?'YouTube':'Media';return '<li class="'+(it===ci?'on':'')+'" data-i="'+i+'"><span class="song-number">'+String(i+1).padStart(2,'0')+'</span><button class="t" data-a="go" title="'+esc(title)+'" aria-pressed="'+(it===ci)+'"><span class="song-name">'+esc(title)+'</span></button><small class="song-meta">'+kind+(it.lrc?' · Lyrics ready':'')+(Number.isFinite(duration)?' · '+fmt(duration):'')+'</small><div class="list-actions">'+(it.mc?'':'<button class="ghost" data-a="ed" title="Edit song" aria-label="Edit song">'+icon('pencil-simple')+'</button>')+'<button class="ghost" data-a="up" title="Move up" aria-label="Move song up"'+(i===0?' disabled':'')+'>'+icon('arrow-up')+'</button><button class="ghost" data-a="dn" title="Move down" aria-label="Move song down"'+(i===items.length-1?' disabled':'')+'>'+icon('arrow-down')+'</button><button class="ghost" data-a="del" title="Remove from setlist" aria-label="Remove from setlist">'+icon('x')+'</button></div></li>'}).join('')}
+ $('#list').innerHTML=items.map((it,i)=>{const title=it.mc?uiText('MC break · ')+(it.memo||uiText('Announcement')):it.title,duration=it.mc?it.dur:it.e!=null?it.e-(it.s||0):it.mediaDuration,kind=it.mc?uiText('MC break'):yid(it.url)?'YouTube':uiText('Media');return '<li class="'+(it===ci?'on':'')+'" data-i="'+i+'"><span class="song-number">'+String(i+1).padStart(2,'0')+'</span><button class="t" data-a="go" title="'+esc(title)+'" aria-pressed="'+(it===ci)+'"><span class="song-name">'+esc(title)+'</span></button><small class="song-meta">'+kind+(it.lrc?uiText(' · Lyrics ready'):'')+(Number.isFinite(duration)?' · '+fmt(duration):'')+'</small><div class="list-actions">'+(it.mc?'':uiMarkup('<button class="ghost" data-a="ed" title="Edit song" aria-label="Edit song">')+icon('pencil-simple')+'</button>')+uiMarkup('<button class="ghost" data-a="up" title="Move up" aria-label="Move song up"')+(i===0?' disabled':'')+'>'+icon('arrow-up')+uiMarkup('</button><button class="ghost" data-a="dn" title="Move down" aria-label="Move song down"')+(i===items.length-1?' disabled':'')+'>'+icon('arrow-down')+uiMarkup('</button><button class="ghost" data-a="del" title="Remove from setlist" aria-label="Remove from setlist">')+icon('x')+'</button></div></li>'}).join('')}
 $('#list').onclick=e=>{const b=e.target.closest('[data-a]');if(!b)return;const i=+b.closest('li').dataset.i,a=b.dataset.a;
- if(a==='go')go(i);else if(a==='ed'){showStudioTab('song');edit=i;generatedTitle='';const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#lq').value=it.title;lyricEditor.load(it);$('#add').innerHTML=icon('check')+'<span>Save changes</span>';$('#ftitle').textContent='Edit song';$('#songTabLabel').textContent='Edit song';$('#cancel').hidden=false;$('#ftitle').scrollIntoView({block:'nearest'})}
+ if(a==='go')go(i);else if(a==='ed'){showStudioTab('song');edit=i;generatedTitle='';const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#lq').value=it.title;lyricEditor.load(it);$('#add').innerHTML=icon('check')+uiMarkup('<span>Save changes</span>');$('#ftitle').textContent=uiText('Edit song');$('#songTabLabel').textContent=uiText('Edit song');$('#cancel').hidden=false;$('#ftitle').scrollIntoView({block:'nearest'})}
  else{const editing=edit>=0?items[edit]:null,c=ci,k0=c?items.indexOf(c):-1,w=k0>=0?k0:pos;if(a==='del')items.splice(i,1);else{const j=a==='up'?i-1:i+1;if(j>=0&&j<items.length)[items[i],items[j]]=[items[j],items[i]]}
   if(editing){const newEdit=items.indexOf(editing);if(newEdit<0)reset();else edit=newEdit}if(c){const k=items.indexOf(c);if(k>=0)pos=k;else{if(k0>=0){pos=w;msg('Removed from the setlist. The current song keeps playing until it ends or you press Stop.')}else if(a==='del'&&i<pos)pos--}}save();render()}};
-function reset(){edit=-1;pickDur=undefined;generatedTitle='';['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');lyricEditor.reset();$('#loff').value=0;$('#add').innerHTML=icon('plus')+'<span>Add to setlist</span>';$('#ftitle').textContent='Add a song';$('#songTabLabel').textContent='Song editor';$('#cancel').hidden=true;$('#lres').innerHTML=''}
+function reset(){searchState='';edit=-1;pickDur=undefined;generatedTitle='';['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');lyricEditor.reset();$('#loff').value=0;$('#add').innerHTML=icon('plus')+uiMarkup('<span>Add to setlist</span>');$('#ftitle').textContent=uiText('Add a song');$('#songTabLabel').textContent=uiText('Song editor');$('#cancel').hidden=true;$('#lres').innerHTML=''}
 $('#cancel').onclick=reset;
 $('#add').onclick=()=>{const u=$('#url').value.trim();if(!/^https?:\/\//.test(u)){msg('Paste a karaoke URL first.');return}
  const start=tp($('#st').value),end=tp($('#en').value);if(Number.isNaN(start)||Number.isNaN(end)||end!=null&&end<=(start||0)){msg('Use valid times (mm:ss or seconds); End must be after Start.');return}if(new TextEncoder().encode(JSON.stringify($('#llrc').value)).length>230000){msg('Lyrics are too long for the relay (maximum 230 KB).');return}
@@ -252,14 +261,18 @@ $('#add').onclick=()=>{const u=$('#url').value.trim();if(!/^https?:\/\//.test(u)
  const lyricBytes=new TextEncoder().encode(JSON.stringify({lrc:ManokaraLyrics.displayLrc(it),romajiLrc:ManokaraLyrics.secondaryLrc(it)})).length;if(lyricBytes>230000){msg('Combined output lyrics exceed 230 KB. Shorten the LRC or choose a single display language.');return}
  let savedItem=it;if(edit>=0){const existing=items[edit],reloadCurrent=existing===ci&&(existing.url!==it.url||existing.s!==it.s||existing.e!==it.e);Object.assign(existing,it);savedItem=existing;delete existing._L;if(existing===ci){dur=it.e!=null?it.e-it.s:null;timelineVersion++;$('#now').textContent=it.title;if(reloadCurrent)go(edit)}}else items.push(it);reset();const persisted=save();render();msg(persisted?'Saved.':'Browser storage is full or unavailable. Changes remain in this window only.');fetchSongTitle(savedItem)};
 $('#addmc').onclick=()=>{const duration=tp($('#mcd').value);if(!Number.isFinite(duration)||duration<=0){msg('Enter a positive MC duration (mm:ss or seconds).');return}items.push({mc:1,memo:$('#mcm').value,dur:duration});$('#mcm').value=$('#mcd').value='';save();render()};
-$('#clr').onclick=()=>{if(confirm('Remove all songs?')){items=[];pos=0;last=-1;reset();save();render();if(ci)msg('Setlist cleared. The current song keeps playing until it ends or you press Stop.')}};
+$('#clr').onclick=()=>{if(confirm(uiText('Remove all songs?'))){items=[];pos=0;last=-1;reset();save();render();if(ci)msg('Setlist cleared. The current song keeps playing until it ends or you press Stop.')}};
 $('#url').onchange=async()=>{const u=$('#url').value.trim(),before=$('#ttl').value,query=$('#lq').value;if(!yid(u)||before.trim()&&before.trim()!==u&&before!==generatedTitle)return;
  const title=await youtubeTitle(u);if(!title||$('#url').value.trim()!==u||$('#ttl').value!==before&&$('#ttl').value.trim())return;
  $('#ttl').value=generatedTitle=title;if(!$('#lq').value||$('#lq').value===query)$('#lq').value=title.replace(/\s*[\(\[【].*$/,'')};
-$('#lsearch').onclick=async()=>{const q=$('#lq').value.trim()||$('#ttl').value.trim();if(!q)return;$('#lres').textContent='Searching…';
+function renderSearchResults(){
+ if(searchState==='results')$('#lres').innerHTML=res.slice(0,10).map((x,i)=>'<li data-i="'+i+'"><span>'+esc(x.trackName+' — '+x.artistName)+'<small> · '+(x.syncedLyrics?uiText('Timed lyrics'):uiText('Plain lyrics'))+'</small></span><small>'+fmt(x.duration||0)+'</small></li>').join('')||uiText('No results.');
+ else if(searchState)$('#lres').textContent=uiText(searchState);
+}
+$('#lsearch').onclick=async()=>{const q=$('#lq').value.trim()||$('#ttl').value.trim();if(!q)return;searchState='Searching…';renderSearchResults();
  try{res=(await(await fetch('https://lrclib.net/api/search?q='+encodeURIComponent(q))).json()).sort((a,b)=>!!b.syncedLyrics-!!a.syncedLyrics);
-  $('#lres').innerHTML=res.slice(0,10).map((x,i)=>'<li data-i="'+i+'"><span>'+esc(x.trackName+' — '+x.artistName)+'<small> · '+(x.syncedLyrics?'Timed lyrics':'Plain lyrics')+'</small></span><small>'+fmt(x.duration||0)+'</small></li>').join('')||'No results.'}
- catch(e){$('#lres').textContent='Search failed. Check your connection.'}};
+  searchState='results';renderSearchResults()}
+ catch(e){searchState='Search failed. Check your connection.';renderSearchResults()}};
 $('#lres').onclick=e=>{const li=e.target.closest('li');if(li){const x=res[+li.dataset.i];$('#llrc').value=x.syncedLyrics||x.plainLyrics||'';lyricEditor.sourceReplaced();pickDur=x.duration;msg(x.syncedLyrics?'Synced lyrics picked. Press Add/Save to keep them.':'Plain text only: it will scroll roughly evenly. During playback press T to time each line.')}};
 /* player controls */
 function togglePause(){if(!ci)return;takeRelayOwnership();const it=ci;
@@ -288,27 +301,27 @@ transposeDialog.addEventListener('keydown',e=>{
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!transposeDialog.hidden){e.preventDefault();closeTranspose()}});
 async function launchTransposeWindow(target){const status=$('#transposeStatus');
  const edge=/Edg\//.test(navigator.userAgent),store=edge?'https://microsoftedge.microsoft.com/addons/detail/transpose-%E2%96%B2%E2%96%BC-pitch-%E2%96%B9-spee/nakcigkhphkecnebinpgpdpbjfjgilkl':'https://chromewebstore.google.com/detail/transpose-pitch-%E2%96%B8-speed-%E2%96%B8/ioimlbgefgadofblnajllknopjboejda';
- window.open(target==='install'?store:location.href,'_blank','noopener');status.textContent=target==='install'?'Extension store opened. Install it in this browser.':'Manokara opened in this browser profile.';
+ window.open(target==='install'?store:location.href,'_blank','noopener');transposeMessage=target==='install'?'Extension store opened. Install it in this browser.':'Manokara opened in this browser profile.';status.textContent=uiText(transposeMessage);
 }
 $('#transposeInstall').onclick=()=>launchTransposeWindow('install');
 $('#transposeOpen').onclick=()=>launchTransposeWindow('app');
 /* green-screen window */
 function showOff(){const it=ci,v=it&&!it.mc?Math.round((it.off||0)*10)/10:0;
- $('#offv').textContent='Sync: '+(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(1)+' s'+(v>0?' (lyrics earlier)':v<0?' (lyrics later)':'');
+ $('#offv').textContent=uiText('Sync: ')+(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(1)+' s'+(v>0?uiText(' (lyrics earlier)'):v<0?uiText(' (lyrics later)'):'');
  $('#offv').style.color=v?'var(--ac)':''}
 const nudge=d=>{const it=ci;if(!it||it.mc)return;it.off=Math.round(((it.off||0)+d)*10)/10;timelineVersion++;showOff();save()};
 $('#lm').onclick=()=>nudge(-.5);$('#lp').onclick=()=>nudge(.5);
 $('#lz').onclick=()=>{const it=ci;if(!it||it.mc)return;it.off=0;timelineVersion++;showOff();save()};
-const FONTS=[['System default','system-ui,"Segoe UI","Yu Gothic",sans-serif'],['Arial','Arial,sans-serif'],['Georgia (serif)','Georgia,serif'],['Courier New','"Courier New",monospace'],['Impact','Impact,sans-serif'],['Comic Sans MS','"Comic Sans MS",cursive'],
+const FONTS=[[uiText('System default'),'system-ui,"Segoe UI","Yu Gothic",sans-serif'],['Arial','Arial,sans-serif'],['Georgia (serif)','Georgia,serif'],['Courier New','"Courier New",monospace'],['Impact','Impact,sans-serif'],['Comic Sans MS','"Comic Sans MS",cursive'],
  ['Roboto · online','Roboto','Roboto:wght@400;800'],['Montserrat · online','Montserrat','Montserrat:wght@400;800'],['Be Vietnam Pro · online','"Be Vietnam Pro"','Be+Vietnam+Pro:wght@400;800'],['Oswald · online','Oswald','Oswald:wght@400;700'],['Playfair Display · online','"Playfair Display"','Playfair+Display:wght@400;800'],['Pacifico · online','Pacifico','Pacifico'],['Lobster · online','Lobster','Lobster'],['Dancing Script · online','"Dancing Script"','Dancing+Script:wght@400;700'],['Noto Sans JP · online','"Noto Sans JP"','Noto+Sans+JP:wght@400;800']];
 $('#lfont').innerHTML=FONTS.map((f,i)=>'<option value="'+i+'">'+esc(f[0])+'</option>').join('');
 const SK='kpt_set',SF=['cdn','lfont','lfc','lsz','lcol','lfx','lshape','lbgmode','ltheme'];let S={};try{S=JSON.parse(localStorage.getItem(SK)||'{}')||{}}catch(e){}let themeSeed=Number(S.themeSeed)>>>0;
 SF.forEach(k=>{if(S[k]!=null&&!(k==='lfx'&&!S.fxv)&&!(k==='ltheme'&&S[k]==='custom'))$('#'+k).value=S[k]});if(!S.fxv)$('#lfx').value='jizura';if(S.lbold!=null)$('#lbold').checked=S.lbold;$('#lcenter').checked=!!S.centerFree;
 SF.forEach(k=>{const el=$('#'+k);if(el.tagName==='SELECT'&&!el.value)el.selectedIndex=0});
 const saveSet=()=>{const o={};SF.forEach(k=>o[k]=$('#'+k).value);o.lbold=$('#lbold').checked;o.centerFree=$('#lcenter').checked;o.themeSeed=themeSeed;o.fxv=1;try{localStorage.setItem(SK,JSON.stringify(o))}catch(e){}};
-function syncFxInputs(){const jizura=$('#lfx').value==='jizura';['lsz','lcol','lfont','lfc','lbold'].forEach(i=>$('#'+i).disabled=jizura);$('#lrandom').disabled=!jizura;$('#lrandom').title=jizura?'Reroll the JIZURA lyric-motion style for the current song':'Select JIZURA to randomize its lyric-motion style'}
+function syncFxInputs(){$('#lrandom').innerHTML=icon('shuffle')+uiText('Shuffle JIZURA style');const jizura=$('#lfx').value==='jizura';['lsz','lcol','lfont','lfc','lbold'].forEach(i=>$('#'+i).disabled=jizura);$('#lrandom').disabled=!jizura;$('#lrandom').title=jizura?uiText('Reroll the JIZURA lyric-motion style for the current song'):uiText('Select JIZURA to randomize its lyric-motion style')}
 $('#lrandom').onclick=()=>{if($('#lfx').value!=='jizura')return;const seed=new Uint32Array(1);try{crypto.getRandomValues(seed);themeSeed=seed[0]}catch(e){themeSeed=(Date.now()^Math.floor(Math.random()*0xffffffff))>>>0}saveSet();publishObsState();msg('JIZURA lyric-motion style randomized. Click again to reroll.')};
-function updateCenterPreview(){const p=$('#cfpreview');let shape=$('#lshape').value;if(shape==='auto')shape=innerHeight>innerWidth*1.1?'tall':'wide';p.dataset.shape=shape;p.style.opacity=$('#lcenter').checked?'1':'.42';$('#centerRow').title=$('#lcenter').checked?'The dotted area stays clear for a character.':'Enable to keep the dotted centre area clear.';const effect=$('#lfx').value,hint=$('#centerHint');if(effect==='folia-monet')hint.textContent='Monet keeps its original lyric-rail and portrait composition; alternating placement is not applied.';else if(effect==='folia-pendolo')hint.textContent='Pendolo renders its clockwork layout as one scene, so Keep centre free is skipped.';else if(effect==='folia-claddagh')hint.textContent='Claddagh already arranges lyrics around an open centre; its circular layout is preserved.';else if(['folia-fume','folia-sonnet','folia-tempera','folia-lumiere','folia-diorama'].includes(effect))hint.textContent='This effect combines lyrics and motion in one full-frame scene, so Keep centre free is skipped to preserve the full-frame effect.';else hint.textContent='Lyrics alternate around the open centre; the Folia background and full-frame effects stay in place.'}
+function updateCenterPreview(){const p=$('#cfpreview');let shape=$('#lshape').value;if(shape==='auto')shape=innerHeight>innerWidth*1.1?'tall':'wide';p.dataset.shape=shape;p.style.opacity=$('#lcenter').checked?'1':'.42';$('#centerRow').title=$('#lcenter').checked?uiText('The dotted area stays clear for a character.'):uiText('Enable to keep the dotted centre area clear.');const effect=$('#lfx').value,hint=$('#centerHint');if(effect==='folia-monet')hint.textContent=uiText('Monet keeps its original lyric-rail and portrait composition; alternating placement is not applied.');else if(effect==='folia-pendolo')hint.textContent=uiText('Pendolo renders its clockwork layout as one scene, so Keep centre free is skipped.');else if(effect==='folia-claddagh')hint.textContent=uiText('Claddagh already arranges lyrics around an open centre; its circular layout is preserved.');else if(['folia-fume','folia-sonnet','folia-tempera','folia-lumiere','folia-diorama'].includes(effect))hint.textContent=uiText('This effect combines lyrics and motion in one full-frame scene, so Keep centre free is skipped to preserve the full-frame effect.');else hint.textContent=uiText('Lyrics alternate around the open centre; the Folia background and full-frame effects stay in place.')}
 updateCenterPreview();
 ['lsz','lcol','lfont','lfc','lbold','cdn','lfx','lcenter','lshape','lbgmode','ltheme'].forEach(i=>['input','change'].forEach(ev=>$('#'+i).addEventListener(ev,()=>{saveSet();if(i==='lfx')syncFxInputs();if(['lcenter','lshape','lfx'].includes(i))updateCenterPreview();publishObsState()})));
 window.addEventListener('resize',updateCenterPreview);
@@ -327,10 +340,10 @@ window.addEventListener('pagehide',()=>directChannel?.close());
 setInterval(sendDirectSnapshot,100);
 function setRelayStatus(ok,owned=true){const el=$('#relayStatus');if(!el)return;
  el.dataset.state=ok?(owned?'connected':'inactive'):'error';
- if(ok){el.textContent=owned?'OBS relay connected':'OBS relay active · another window controls lyrics'}
- else if(location.protocol==='file:'){el.innerHTML='OBS relay unavailable on file:// · <a href="http://localhost:8000/manokara.html">open server version</a>'}
- else if(location.protocol==='https:'){el.textContent='Lyric relay unavailable · check deployment'}
- else{el.textContent='OBS relay unavailable · start the server'}
+ if(ok){el.textContent=owned?uiText('OBS relay connected'):uiText('OBS relay active · another window controls lyrics')}
+ else if(location.protocol==='file:'){el.innerHTML=uiMarkup('OBS relay unavailable on file:// · <a href="http://localhost:8000/manokara.html">open server version</a>')}
+ else if(location.protocol==='https:'){el.textContent=uiText('Lyric relay unavailable · check deployment')}
+ else{el.textContent=uiText('OBS relay unavailable · start the server')}
 }
 function makeObsSnapshot(){
  const it=ci,custom=$('#lfc').value.trim().replace(/["<>]/g,'');
@@ -366,9 +379,9 @@ var pickDur;
 const P=$('#pan');let pk='',panelActive=-2,fs=16;
 function fsz(d){fs=Math.min(40,Math.max(11,fs+d));P.style.setProperty('--ps',fs+'px')}
 $('#fm').onclick=()=>fsz(-2);$('#fp').onclick=()=>fsz(2);
-function updPan(){const it=ci;if(!it||it.mc||!it.lrc){if(pk!=='-'){P.innerHTML='<div class="lyrics-empty">'+icon('text-align-left')+'<span>'+(it&&!it.mc?'No lyrics for this song yet.<br>Find or import lyrics in the song editor.':'Your words will find their place here.<br>Add lyrics to a song to follow along.')+'</span></div>';$('#pinfo').textContent='';pk='-'}return}
+function updPan(){const it=ci;if(!it||it.mc||!it.lrc){if(pk!=='-'){P.innerHTML='<div class="lyrics-empty">'+icon('text-align-left')+'<span>'+(it&&!it.mc?uiMarkup('No lyrics for this song yet.<br>Find or import lyrics in the song editor.'):uiMarkup('Your words will find their place here.<br>Add lyrics to a song to follow along.'))+'</span></div>';$('#pinfo').textContent='';pk='-'}return}
  const L=getL(it),k=it._L.k;
- if(k!==pk){pk=k;panelActive=-2;P.scrollTop=0;P.innerHTML=it._L.all.map(q=>'<div class="ln">'+(q.x?esc(q.x):icon('music-notes'))+(q.romaji?'<span class="romanized">'+esc(q.romaji)+'</span>':'')+'</div>').join('');$('#pinfo').textContent=it._L.timed?'':'Plain text: scrolling is approximate. Press T on each line to time it.'}
+ if(k!==pk){pk=k;panelActive=-2;P.scrollTop=0;P.innerHTML=it._L.all.map(q=>'<div class="ln">'+(q.x?esc(q.x):icon('music-notes'))+(q.romaji?'<span class="romanized">'+esc(q.romaji)+'</span>':'')+'</div>').join('');$('#pinfo').textContent=it._L.timed?'':uiText('Plain text: scrolling is approximate. Press T on each line to time it.')}
  const t=counting?-1:elapsed()+(it.off||0);let a=null;for(const q of L){if(q.t<=t)a=q;else break}
  const idx2=a?it._L.all.indexOf(a):-1;if(idx2===panelActive)return;panelActive=idx2;[...P.children].forEach((e,i)=>e.classList.toggle('cl',i===idx2));
  const e=P.children[idx2];if(e)P.scrollTop=e.offsetTop-P.clientHeight/2+e.clientHeight/2}
@@ -377,8 +390,29 @@ function tap(){const it=ci;if(!it||it.mc||!it.lrc){msg('Play a song with lyrics 
  const raw=it.lrc.split(/\r?\n/),i=raw.findIndex(l=>l.replace(/\[[^\]]*\]/g,'').trim()&&!/^\s*\[\d+:\d{2}/.test(l));if(i<0){msg('All lines already have times.');return}
  const t=Math.max(0,elapsed()+(it.off||0)),stamp='['+String(Math.floor(t/60)).padStart(2,'0')+':'+(t%60).toFixed(2).padStart(5,'0')+']';const romanized=ManokaraLyrics.validRomaji(it)?it.romaji.lrc.split(/\r?\n/):null;raw[i]=stamp+raw[i].trim();it.lrc=raw.join('\n');if(romanized){romanized[i]=stamp+romanized[i].trim();it.romaji={source:it.lrc,lrc:romanized.join('\n')}}timelineVersion++;save();msg('Timed line '+(i+1)+'.')}
 $('#tap').onclick=tap;
-document.addEventListener('keydown',e=>{if(/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey)return;if(e.key==='t'||e.key==='T')tap()});
-render();
+document.addEventListener('keydown',e=>{if(ManokaraTour.active||!transposeDialog.hidden||/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey)return;if(e.key==='t'||e.key==='T')tap()});
+function refreshLanguage(){
+ render();updatePlaybackState();setPauseUI(paused);syncFxInputs();updateCenterPreview();
+ renderSearchResults();$('#transposeStatus').textContent=uiText(transposeMessage);
+ $('#ftitle').textContent=uiText(edit>=0?'Edit song':'Add a song');
+ $('#songTabLabel').textContent=uiText(edit>=0?'Edit song':'Song editor');
+ $('#add').innerHTML=icon(edit>=0?'check':'plus')+'<span>'+uiText(edit>=0?'Save changes':'Add to setlist')+'</span>';
+ $('#lfont').options[0].textContent=uiText('System default');
+ if(!ci){$('#stage').innerHTML=stageEmpty();$('#now').textContent=uiText('Nothing playing yet')}
+ else if(ci.mc){$('#now').textContent=uiText('MC break');const title=$('#stage h2');if(title)title.textContent=uiText('MC break');if(!ci.memo&&$('#stage p'))$('#stage p').textContent=uiText('Take a moment between songs.')}
+ if(!ci||ci.mc||!ci.lrc){pk='';updPan()}
+ else $('#pinfo').textContent=ci._L?.timed?'':uiText('Plain text: scrolling is approximate. Press T on each line to time it.');
+ if(counting){ovShow();$('#time').textContent=uiText('Starting in ')+Math.ceil(cdLeft)+' s'}
+ if(relayUp!==null)setRelayStatus(relayUp===true||relayUp==='inactive',relayUp!=='inactive');
+ else $('#relayStatus').textContent=uiText('Connecting to OBS…');
+ if(!relayInitialized)$('#obsurl').value=uiText('Connecting…');
+ msg(messageSource);
+}
+ManokaraI18n.init();
+window.addEventListener('manokara:languagechange',refreshLanguage);
+refreshLanguage();
+ManokaraTour.init({showTab:showStudioTab});
+
 </script>
 </body>
 </html>

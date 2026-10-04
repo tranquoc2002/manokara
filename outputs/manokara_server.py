@@ -256,6 +256,7 @@ def snapshot(payload):
 def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
              "manokara-ui.css", "manokara-icons.svg",
+             "manokara-i18n.js", "manokara-tour.js", "manokara-tour.css",
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
              "manokara-session.js", "manokara-core.js",
              "manokara-lyrics.js", "manokara-lyrics-editor.js", "manokara-romaji-worker.js",

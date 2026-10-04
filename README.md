@@ -14,6 +14,14 @@ Shared lyric parsing and timing live in `outputs/manokara-core.js`; all visualiz
 
 The controller has separate **Song editor** and **OBS output** tabs, a setlist, and a live lyrics pane with sync controls. It adapts to phones and supports light/dark themes. The interface uses bundled Geist fonts and Phosphor SVG icons; normal deployment requires no Node.js build or external font/icon requests. To rebuild those assets, use `npm ci --ignore-scripts` and `npm run build:ui`. Licenses ship in `outputs/ui-assets/NOTICES.txt`.
 
+## Help and interface language
+
+Use **? Help / Hướng dẫn** in the header for a guided tour. Each step highlights the actual controls and opens the relevant studio tab. **Next / Tiếp**, **Back / Quay lại**, **Skip / Bỏ qua** and Escape let you navigate or leave. The guide covers adding songs, finding/importing lyrics, Romaji, playback, sync, MC breaks, OBS, effects and audio reaction. Closing it restores your previous tab, open sections and scroll position; your draft and playback keep their state.
+
+Choose **Tiếng Việt** or **English** in the header or inside the guide. The choice is remembered in this browser; the initial language follows the browser language. Interface labels and controller messages are translated, while song names, lyrics and LRC timecodes remain as entered. Translation and tour modules are bundled locally and add no external service or dependency.
+
+After updating these files, restart the Python server and reload the controller so its asset manifest and HTML script policy include the new guide.
+
 ## Finding and importing lyrics
 
 - **Find lyrics** searches LRCLIB and returns lyrics directly in Manokara.
