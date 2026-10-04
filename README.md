@@ -12,9 +12,11 @@ Run security regression tests with `python -m pytest tests/test_security.py`. Se
 
 Shared lyric parsing and timing live in `outputs/manokara-core.js`; all visualizers consume the same timeline. Use `node --test tests/test_core.cjs` for clock/parser regressions and `python tests/browser_smoke.py --all-effects` for the controller and every output mode.
 
+The controller has separate **Song editor** and **OBS output** tabs, a setlist, and a live lyrics pane with sync controls. It adapts to phones and supports light/dark themes. The interface uses bundled Geist fonts and Phosphor SVG icons; normal deployment requires no Node.js build or external font/icon requests. To rebuild those assets, use `npm ci --ignore-scripts` and `npm run build:ui`. Licenses ship in `outputs/ui-assets/NOTICES.txt`.
+
 ## Finding and importing lyrics
 
-- **Search LRCLIB** returns lyrics directly in Manokara.
+- **Find lyrics** searches LRCLIB and returns lyrics directly in Manokara.
 - **Lyricsify ↗** opens a search using the song/artist field. Download the matching `.lrc` there and use **Import LRC**, drop it on the lyric editor, or paste the copied text. This is an external search fallback, not an automated scraper/API integration.
 - Imports retain the original LRC tags. Auto encoding handles UTF-8, BOM-marked UTF-16 and Shift_JIS; an encoding selector is available if needed. Title and duration metadata fill empty fields. Choose the recording/version that matches your karaoke audio and adjust Live sync if needed.
 

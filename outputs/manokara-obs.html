@@ -156,7 +156,7 @@ function render(){
   const remaining=clock.countdown();
   count=String(Math.max(1,Math.ceil(remaining)));
  }else if(s.mc){
-  current=s.memo||'🎙';previous='';
+  current=s.memo||'MC break';previous='';
  }
  $('#previous').textContent=previous;$('#count').textContent=count;
  const shown=current||'';

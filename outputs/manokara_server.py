@@ -255,11 +255,15 @@ def snapshot(payload):
 
 def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
+             "manokara-ui.css", "manokara-icons.svg",
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
              "manokara-session.js", "manokara-core.js",
              "manokara-lyrics.js", "manokara-lyrics-editor.js", "manokara-romaji-worker.js",
              "manokara-relay.js", "manokara-audio.js"]
     result = {"/" + name: ROOT / name for name in names}
+    for file in (ROOT / "ui-assets").iterdir():
+        if file.is_file() and file.suffix in (".css", ".svg", ".woff2", ".txt"):
+            result["/ui-assets/" + file.name] = file
     # Only the converter, dictionary blobs and notices are served from this directory.
     for file in (ROOT / "romaji-assets").rglob("*"):
         if file.is_file() and file.suffix in (".js", ".gz", ".txt"):
@@ -329,6 +333,9 @@ class SecurityHeaders:
                 elif (message["status"] == 200 and scope["path"].startswith("/romaji-assets/")
                       and scope["path"] in self.manifest_urls):
                     # Versioned public dictionary files can be reused on later conversions.
+                    headers[b"cache-control"] = b"public, max-age=86400"
+                elif (message["status"] == 200 and scope["path"].startswith("/ui-assets/")
+                      and scope["path"] in self.manifest_urls):
                     headers[b"cache-control"] = b"public, max-age=86400"
                 if self.settings.secure:
                     headers[b"strict-transport-security"] = b"max-age=31536000"

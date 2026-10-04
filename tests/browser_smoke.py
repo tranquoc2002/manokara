@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "outputs"))
 import manokara_server as backend
-from browser_cases import exercise_controller, exercise_server_fallback, exercise_video_titles
+from browser_cases import exercise_controller, exercise_server_fallback, exercise_video_titles, song_editor, set_effect
 
 
 def main():
@@ -60,7 +60,8 @@ def main():
                 obs = viewer.new_page()
                 watch(obs)
                 obs.goto(old_link)
-                page.locator("#lfx").select_option("clean")
+                set_effect(page, "clean")
+                song_editor(page)
                 # A normal HTTPS link uses the app's clock fallback without fetching external media.
                 page.locator("#url").fill("https://example.com/test-song")
                 page.locator("#ttl").fill("Browser smoke test")
@@ -74,7 +75,8 @@ def main():
                 other.goto(page.url)
                 other.wait_for_function("() => document.querySelector('#relayStatus').textContent === 'OBS relay connected'")
                 assert other.url != page.url
-                other.locator('#lfx').select_option('clean')
+                set_effect(other, 'clean')
+                song_editor(other)
                 other.locator('#url').fill('https://example.com/second-user')
                 other.locator('#ttl').fill('Second user song')
                 other.locator('#llrc').fill('[00:00]Second user lyrics')
@@ -96,22 +98,22 @@ def main():
                 exercise_server_fallback(page, obs)
                 exercise_video_titles(page)
                 # Verify the bundled visualizer and its nested iframe receive viewer authentication.
-                page.locator("#lfx").select_option("folia-classic")
+                set_effect(page, "folia-classic")
                 obs.wait_for_function("() => document.body.dataset.folia === 'on'")
                 folia = obs.frame_locator("#foliaFrame")
                 folia.locator("#root > *").first.wait_for(timeout=20000)
                 assert "#view=" in obs.locator("#foliaFrame").get_attribute("src")
                 if "--all-effects" in sys.argv:
                     for mode in sorted(backend.EFFECTS - {"folia-classic", "jizura", "clean"}):
-                        page.locator("#lfx").select_option(mode)
+                        set_effect(page, mode)
                         if mode.startswith("folia-"):
                             obs.locator(f'#foliaFrame[data-mode="{mode}"]').wait_for()
                             folia.locator("#root > *").first.wait_for(timeout=20000)
                         obs.wait_for_timeout(800)
                     print("All visualizer modes loaded.")
-                page.locator("#lfx").select_option("jizura")
+                set_effect(page, "jizura")
                 obs.wait_for_function("() => document.body.dataset.jizura === 'on'")
-                page.locator("#lfx").select_option("clean")
+                set_effect(page, "clean")
                 obs.wait_for_function("() => document.querySelector('#current').textContent === 'Browser smoke test' && document.body.dataset.folia === 'off'")
                 page.locator("#rotateobs").click()
                 page.wait_for_function("() => document.querySelector('#msg').textContent.startsWith('Previous OBS link revoked.')")

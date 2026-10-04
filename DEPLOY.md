@@ -61,7 +61,7 @@ A local check is:
 curl --fail -H 'Host: mano.del4yowo.id.vn' http://127.0.0.1:8000/healthz
 ```
 
-Open `https://mano.del4yowo.id.vn` and copy the OBS URL into an OBS Browser Source. A private room opens automatically. OBS links grant read-only access; "Replace OBS link" revokes the old link. OBS does not need cookies.
+Open `https://mano.del4yowo.id.vn`, select **OBS output**, and copy the OBS URL into an OBS Browser Source. A private room opens automatically. OBS links grant read-only access; **Replace link** revokes the old link. OBS does not need cookies.
 
 Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocket Loader, which can break the script hashes in the content security policy. Leave HTML and relay responses uncached. Any tunnel access rules must let visitors load the public app and let OBS load its page, assets, and `/__lyric-state` without an interactive login.
 
@@ -86,7 +86,7 @@ export MANOKARA_YTDLP_FIREFOX_COOKIES=1
 export MANOKARA_YTDLP_FIREFOX_PROFILE="$HOME/.mozilla/firefox/your-profile"
 ```
 
-The profile variable can be omitted to use yt-dlp's default Firefox profile. Cookies are read only by server subprocesses; there is no cookie upload form or browser-visible cookie data. Use a separate profile/account: a public relay shares its request volume, and stale/account-specific cookies can make videos fail that work without cookies. Private, members-only, age-restricted, live and DRM content remains rejected. An unavailable video shows an error and respects Skip errors.
+The profile variable can be omitted to use yt-dlp's default Firefox profile. Cookies are read only by server subprocesses; there is no cookie upload form or browser-visible cookie data. Use a separate profile/account: a public relay shares its request volume, and stale/account-specific cookies can make videos fail that work without cookies. Private, members-only, age-restricted, live and DRM content remains rejected. An unavailable video shows an error and respects **Skip unavailable songs**.
 
 ### Rooms and OBS
 
@@ -137,6 +137,10 @@ To rebuild Romaji assets from pinned dependencies, run `npm ci --ignore-scripts`
 Deploy `manokara-relay.js`, `manokara-audio.js`, the updated controller/core/server and the rebuilt Folia entry/bundles together, then restart Python and refresh both the controller and OBS source. OBS uses `GET /__lyric-state?room=…&stream=1` with its existing Authorization header and `Content-Type: text/event-stream`. Preserve that content type through Cloudflare Tunnel; do not cache/buffer the endpoint. Normal polling remains available when streaming cannot connect. Keep one backend worker, as room playback/events live in that process. Audio sharing requires a secure context (HTTPS or local loopback) and explicit user selection of a tab with audio enabled.
 
 Cloudflare documents its streaming content-type requirement in [Tunnel troubleshooting](https://developers.cloudflare.com/tunnel/troubleshooting/). The app sends no recording, only six energy levels; actual lyric/word timing comes from LRC, not audio beat detection.
+
+## Updating the interface
+
+Deploy the updated `outputs/manokara.html`, `outputs/manokara-obs.html`, `outputs/manokara_server.py`, `outputs/manokara-ui.css`, `outputs/manokara-icons.svg` and the entire `outputs/ui-assets/` directory together. Restart your existing Python process using your start script and reload the page and OBS source. Fonts and icons are prebuilt and served by Python; no new service or build step is needed on the VPS. Keep the other existing output assets when updating.
 
 ## Source and notices
 

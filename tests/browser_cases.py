@@ -23,7 +23,27 @@ window.onYouTubeIframeAPIReady();
 """
 
 
+def song_editor(page):
+    page.locator('#tab-song').click()
+
+
+def output_settings(page):
+    page.locator('#tab-output').click()
+
+
+def set_effect(page, effect):
+    output_settings(page)
+    page.locator('#lfx').select_option(effect)
+
+
+def mc_editor(page):
+    song_editor(page)
+    if page.locator('#mcDetails').get_attribute('open') is None:
+        page.locator('#mcDetails summary').click()
+
+
 def add_song(page, title, url="https://example.com/test-song", lyrics="[00:00]Browser smoke test", start="", end=""):
+    song_editor(page)
     page.locator('#ttl').fill(title)
     page.locator('#url').fill(url)
     page.locator('#llrc').fill(lyrics)
@@ -33,6 +53,7 @@ def add_song(page, title, url="https://example.com/test-song", lyrics="[00:00]Br
 
 
 def exercise_video_titles(page):
+    song_editor(page)
     oembed = 'https://www.youtube.com/oembed?*'
     endpoint = '**/__youtube/title?*'
     pending = []
@@ -123,7 +144,7 @@ def exercise_server_fallback(page, obs):
     page.route(stream, serve)
     try:
         page.locator('#cdn').fill('3')
-        page.locator('#lfx').select_option('clean')
+        set_effect(page, 'clean')
         add_song(page, 'Server fallback test', 'https://www.youtube.com/watch?v=ju03AIeny2Q', '[00:00]Server fallback lyrics', start='00:03', end='00:08')
         page.locator('#list li').last.locator('[data-a="go"]').click()
         page.wait_for_function('() => window.testYT?.options.videoId === "ju03AIeny2Q"')
@@ -153,13 +174,37 @@ def exercise_server_fallback(page, obs):
 
 def exercise_controller(page, obs, origin):
     # Desktop keeps one frame; phone uses one column without horizontal overflow.
-    for width, height in [(1920,1080), (1440,900), (1024,768), (390,844)]:
+    for width, height in [(1920,1080), (1440,900), (1024,768), (860,700), (390,844)]:
         page.set_viewport_size({'width':width, 'height':height})
         metrics = page.evaluate('({w:innerWidth,h:innerHeight,sw:document.documentElement.scrollWidth,sh:document.documentElement.scrollHeight})')
         assert metrics['sw'] <= width + 1, metrics
         if width > 760:
             assert metrics['sh'] <= height + 1, metrics
+        # Icon-only header controls must remain visible on phones.
+        for control in ('#theme', '#transpose'):
+            assert page.locator(control + ' .icon').is_visible()
     page.set_viewport_size({'width':1440, 'height':900})
+    # The tool tabs work from the keyboard and exclude the hidden pane from tab order.
+    song_editor(page)
+    page.locator('#tab-song').focus()
+    page.keyboard.press('ArrowRight')
+    assert page.locator('#tab-output').get_attribute('aria-selected') == 'true'
+    assert page.locator('#panel-song').is_hidden()
+    assert page.locator('#panel-green').is_visible()
+    assert page.locator('#tab-output').evaluate('(el) => el === document.activeElement')
+    page.keyboard.press('Home')
+    assert page.locator('#tab-song').get_attribute('aria-selected') == 'true'
+    assert page.locator('#panel-green').is_hidden()
+    # The dialog contains keyboard focus, closes with Escape and returns to its opener.
+    page.locator('#transpose').click()
+    assert page.locator('#transposeDialog').is_visible()
+    page.keyboard.press('Tab')
+    assert page.locator('#transposeInstall').evaluate('(el) => el === document.activeElement')
+    page.keyboard.press('Shift+Tab')
+    assert page.locator('#transposeClose').evaluate('(el) => el === document.activeElement')
+    page.keyboard.press('Escape')
+    assert page.locator('#transposeDialog').is_hidden()
+    assert page.locator('#transpose').evaluate('(el) => el === document.activeElement')
     page.locator('#theme').click()
     first = page.locator('html').get_attribute('data-theme')
     page.locator('#theme').click()
@@ -183,6 +228,7 @@ def exercise_controller(page, obs, origin):
     assert page.locator('#list li').count() == 2
     page.locator('#cancel').click() if page.locator('#cancel').is_visible() else None
     page.locator('#st').fill('')
+    mc_editor(page)
     page.locator('#mcd').fill('')
     page.locator('#addmc').click()
     assert page.locator('#list li').count() == 2
@@ -203,7 +249,7 @@ def exercise_controller(page, obs, origin):
     # on availability or regional restrictions of an actual YouTube video.
     page.route('https://www.youtube.com/iframe_api', lambda route: route.fulfill(content_type='application/javascript', body=YOUTUBE_FIXTURE))
     page.locator('#cdn').fill('3')
-    page.locator('#lfx').select_option('folia-classic')
+    set_effect(page, 'folia-classic')
     add_song(page, 'Countdown song', 'https://www.youtube.com/watch?v=dz3sM6ygX_g', '[00:00]First line\n[00:01]Second line\n[00:02]Third line')
     page.locator('#list li').nth(2).locator('[data-a="go"]').click()
     obs.wait_for_function('() => document.querySelector("#count").textContent !== "" && document.body.dataset.folia === "off"')
@@ -238,6 +284,7 @@ def exercise_controller(page, obs, origin):
     long_line = '放ったアルバムをずっと歌いたい夜空に輝く星たちと'
     page.locator('#llrc').fill('[00:00]' + long_line + '\n[01:00]Next line')
     page.locator('#add').click()
+    output_settings(page)
     page.locator('#lcenter').check()
     obs.wait_for_function('() => ManokaraOutput.getSnapshot()?.paused && ManokaraOutput.time() > 14')
     obs.reload()
@@ -264,6 +311,7 @@ def exercise_controller(page, obs, origin):
     page.wait_for_function('() => document.querySelector("#msg").textContent.includes("Server playback is disabled")')
 
     # MC and stop clear motion without displaying a Ready placeholder over the lyrics.
+    mc_editor(page)
     page.locator('#mcm').fill('MC regression')
     page.locator('#mcd').fill('00:30')
     page.locator('#addmc').click()
@@ -273,7 +321,7 @@ def exercise_controller(page, obs, origin):
     obs.wait_for_function('() => document.querySelector("#current").textContent === "" && document.body.dataset.folia === "off"')
 
     # Restore a predictable song for the all-effects/viewer-token smoke checks.
-    page.locator('#lfx').select_option('clean')
+    set_effect(page, 'clean')
     page.locator('#list li').nth(1).locator('[data-a="go"]').click()
     obs.wait_for_function('() => document.querySelector("#current").textContent === "Browser smoke test"')
     saved = page.evaluate('({items:localStorage.getItem("kpt2"),prefs:localStorage.getItem("kpt_set")})')
@@ -286,6 +334,7 @@ def exercise_controller(page, obs, origin):
     page.wait_for_function('() => document.querySelector("#relayStatus").textContent === "OBS relay connected"')
     page.locator('#list li').nth(1).locator('[data-a="go"]').click()
     obs.wait_for_function('() => document.querySelector("#current").textContent === "Browser smoke test"')
+    output_settings(page)
     with page.expect_popup() as opened:
         page.locator('#lwin').click()
     popup = opened.value
