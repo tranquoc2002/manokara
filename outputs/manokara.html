@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>manokara</title><link rel="icon" href="./manokara.ico"><script>if(location.hostname==='127.0.0.1'&&location.port==='8000'){location.replace('http://localhost:'+location.port+location.pathname+location.search+location.hash)}</script>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>manokara</title><link rel="icon" href="./manokara.ico">
 <style>
 :root{--bg:#f3f6fa;--fg:#172033;--card:#fff;--ac:#0e7490;--mu:#64748b}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1220;--fg:#e8effa;--card:#141f32;--ac:#0e7490;--mu:#9aabc2}}
@@ -51,9 +51,9 @@ header{flex:0 0 32px}#grid{display:grid;grid-template-columns:minmax(220px,270px
 @media(max-width:1100px){body{padding:6px}#grid{grid-template-columns:minmax(190px,230px) minmax(0,1fr) minmax(190px,230px);gap:6px}#stage{max-height:48vh}}
 @media(max-width:760px){html,body{height:auto;min-height:100%;overflow:auto}body{display:block}#grid{display:flex;flex-direction:column}#setlistSide{height:32vh;min-height:180px;margin:6px 0}#maincol{display:block}#player{margin:6px 0}#workspace{min-height:48vh;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}#side{height:40vh;min-height:220px;margin:6px 0}}
 </style></head><body>
-<header><div><h1>🎤 manokara</h1></div><div class="row" style="margin:0"><button class="s" id="transpose">🎵 Transpose</button><button class="s" id="theme">☀ / ☾</button></div></header>
-<div id="transposeDialog" class="modal-backdrop" hidden role="presentation"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="transposeTitle"><h2 id="transposeTitle">Dùng Transpose với Manokara</h2><p>Transpose là tiện ích trình duyệt để đổi tông, chỉnh tốc độ và lặp đoạn nhạc. Manokara dùng profile trình duyệt riêng, nên cần cài extension vào đúng profile này một lần.</p><ol><li>Cài Transpose trong profile Manokara bằng nút bên dưới.</li><li>Mở Manokara trong cửa sổ trình duyệt có thanh công cụ.</li><li>Phát bài hát ở cửa sổ đó rồi mở biểu tượng Transpose trên thanh công cụ.</li></ol><p>Nếu Transpose không nhận video nhúng, hãy cấp quyền cho trang Manokara và YouTube; sau đó thử chế độ <b>Tab Audio</b> trong Transpose. Cửa sổ mới dùng cùng profile, nhưng bạn cần bấm Play trong cửa sổ đó.</p><div class="row"><button id="transposeInstall">Cài Transpose</button><button class="s" id="transposeOpen">Mở Manokara có thanh extension</button><button class="s" id="transposeClose">Đóng</button></div><small id="transposeStatus" class="mu" aria-live="polite"></small></section></div>
-<div id="warn" hidden><b>OBS relay needs the Manokara server.</b> This app is open as <code>file://</code>, so OBS cannot receive live lyrics. From the project folder run <code>python .\outputs\manokara_server.py</code>, then open <a href="http://localhost:8000/manokara.html">http://localhost:8000/manokara.html</a>. Do not use <code>python -m http.server</code> for OBS; it does not provide the lyric relay.</div>
+<header><div><h1>🎤 manokara</h1></div><div class="row" style="margin:0"><button class="s" id="transpose">🎵 Transpose</button><button class="s" id="theme">☀ / ☾</button><button class="s" id="logout">Sign out</button></div></header>
+<div id="transposeDialog" class="modal-backdrop" hidden role="presentation"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="transposeTitle"><h2 id="transposeTitle">Use Transpose with Manokara</h2><p>Transpose is a browser extension for pitch, speed, and loops. Install it in the browser profile you use for Manokara.</p><ol><li>Install Transpose using the button below.</li><li>Open Manokara in a browser window with the extension toolbar visible.</li><li>Play a song, then open Transpose from the toolbar.</li></ol><p>If the extension does not detect embedded video, allow access to Manokara and YouTube, then try its <b>Tab Audio</b> mode. A new window uses your current browser profile.</p><div class="row"><button id="transposeInstall">Install Transpose</button><button class="s" id="transposeOpen">Open Manokara window</button><button class="s" id="transposeClose">Close</button></div><small id="transposeStatus" class="mu" aria-live="polite"></small></section></div>
+<div id="warn" hidden><b>Open Manokara through its configured server URL.</b> The lyric relay and operator login require the Python server. See DEPLOY.md for setup.</div>
 
 <div id="grid"><aside class="card" id="setlistSide"><b>Setlist</b><ol id="list"></ol><div class="row"><button class="s" id="clr">Clear all</button></div></aside><div id="maincol">
 <div class="card" id="player"><div id="stage">Waiting to play…</div>
@@ -80,13 +80,14 @@ header{flex:0 0 32px}#grid{display:grid;grid-template-columns:minmax(220px,270px
 <div class="row" id="centerRow"><label class="mu"><input type="checkbox" id="lcenter"> Keep centre free</label><label class="mu">Frame <select id="lshape"><option value="auto">Auto (output frame)</option><option value="wide">Wide</option><option value="tall">Tall</option></select></label><div class="cf-preview" id="cfpreview" data-shape="wide" title="Dotted outline marks the character-safe area"><span class="cf-free"></span><i class="cf-line cf-a"></i><i class="cf-line cf-b"></i></div><small class="cf-preview-label" id="centerHint">Lyrics alternate around the open centre in supported effects.</small></div>
 <div class="row"><label class="mu">Font <select id="lfont"></select></label><input id="lfc" placeholder="Custom font name (optional)" style="width:200px"><label class="mu"><input type="checkbox" id="lbold" checked> Bold</label><small>☁ = Google Fonts (needs internet). A custom name uses an installed font, or a Google font of that name.</small></div>
 <div class="row"><span class="mu">Live sync:</span><button class="s" id="lm">−0.5 s</button><button class="s" id="lp">+0.5 s</button><button class="s" id="lz">Reset</button><b id="offv" title="Current live sync offset">Sync: 0.0 s</b><small id="offh">Moves the lyrics of the song that is playing. + shows lines earlier, − shows them later. Lyrics time 0 = when the song starts here.</small></div>
-<div class="row mu"><small>OBS: use a Browser Source with this URL (keep the source active):</small><input id="obsurl" readonly value="http://localhost:8000/manokara-obs.html" style="flex:1;min-width:210px"><button class="s" id="copyobs">Copy URL</button><small id="relayStatus">OBS relay: checking…</small></div></div>
+<div class="row mu"><small>OBS: use a Browser Source with this URL (keep the source active):</small><input id="obsurl" readonly value="Connecting..." style="flex:1;min-width:210px"><button class="s" id="copyobs">Copy URL</button><button class="s" id="rotateobs" title="Revoke the previous OBS link and create a new one">Replace OBS link</button><small id="relayStatus">OBS relay: checking…</small></div></div>
 
 </div></div>
 </div>
 <aside class="card" id="side"><div class="row" style="margin:0"><b>Lyrics</b><button class="s" id="fm">A−</button><button class="s" id="fp">A+</button><button id="tap">⏱ Set line time (T)</button></div>
 <div id="pan" class="mu">Play a song to see its lyrics.</div><small class="mu" id="pinfo"></small></aside></div>
 
+<script src="./manokara-session.js"></script>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
@@ -96,11 +97,12 @@ try{items=JSON.parse(localStorage.getItem('kpt2')||'[]')}catch(e){}
 const save=()=>{try{localStorage.setItem('kpt2',JSON.stringify(items,(k,v)=>k==='_L'?undefined:v))}catch(e){}};
 const msg=t=>$('#msg').textContent=t||'';
 const relayPageId=(()=>{try{return crypto.randomUUID()}catch(e){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}})();
-const relayRoom=(()=>{const url=new URL(location.href),valid=s=>/^[a-zA-Z0-9_-]{16,64}$/.test(s||'');let room=url.searchParams.get('room');try{if(!valid(room)){room=localStorage.getItem('manokaraRelayRoom');if(!valid(room)){room=(()=>{try{return crypto.randomUUID().replace(/-/g,'')}catch(e){return Date.now().toString(36)+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)}})();localStorage.setItem('manokaraRelayRoom',room)}url.searchParams.set('room',room);history.replaceState(history.state,'',url)}else localStorage.setItem('manokaraRelayRoom',room)}catch(e){if(!valid(room)){room=Date.now().toString(36)+Math.random().toString(36).slice(2);url.searchParams.set('room',room);history.replaceState(history.state,'',url)}}return room})();
+let relayRoom='',relayInitialized=false;
+const relayReady=window.ManokaraSession.ready.then(info=>{relayRoom=info.room;relayInitialized=true;$('#obsurl').value=window.ManokaraSession.obsUrl(false);return info});
 const relayUrl=path=>{const url=new URL(path,location.href);url.searchParams.set('room',relayRoom);return url.href};
-$('#obsurl').value=relayUrl('/manokara-obs.html');
-function relayServerAction(action){try{return fetch(relayUrl('/__lyric-owner'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({writerId:relayPageId,action}),keepalive:action==='release'}).catch(()=>{})}catch(e){return Promise.resolve()}}
-function takeRelayOwnership(){relayServerAction('claim')}
+async function relayServerAction(action){try{await relayReady;return await window.ManokaraSession.api(relayUrl('/__lyric-owner'),{writerId:relayPageId,action},{keepalive:action==='release'})}catch(e){return undefined}}
+let claimPending=false;
+function takeRelayOwnership(){if(claimPending)return;claimPending=true;relayServerAction('claim').finally(()=>{claimPending=false})}
 document.addEventListener('pointerdown',takeRelayOwnership,true);
 document.addEventListener('keydown',takeRelayOwnership,true);
 takeRelayOwnership();
@@ -201,10 +203,9 @@ $('#transpose').onclick=()=>{transposeDialog.hidden=false;$('#transposeClose').f
 $('#transposeClose').onclick=()=>{transposeDialog.hidden=true;$('#transpose').focus()};
 transposeDialog.addEventListener('click',e=>{if(e.target===transposeDialog)transposeDialog.hidden=true});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!transposeDialog.hidden){transposeDialog.hidden=true;$('#transpose').focus()}});
-async function launchTransposeWindow(target){const status=$('#transposeStatus');status.textContent='Đang mở cửa sổ trình duyệt…';
- if(location.protocol==='https:'){const edge=/Edg\//.test(navigator.userAgent),store=edge?'https://microsoftedge.microsoft.com/addons/detail/transpose-%E2%96%B2%E2%96%BC-pitch-%E2%96%B9-spee/nakcigkhphkecnebinpgpdpbjfjgilkl':'https://chromewebstore.google.com/detail/transpose-pitch-%E2%96%B8-speed-%E2%96%B8/ioimlbgefgadofblnajllknopjboejda',url=target==='install'?store:location.href;window.open(url,'_blank','noopener');status.textContent=target==='install'?'Đã mở cửa hàng extension trong trình duyệt này.':'Đã mở Manokara trong profile trình duyệt hiện tại.';return}
- try{const r=await fetch('/__open-browser',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target})});const data=await r.json();if(!r.ok)throw Error(data.error||'Không mở được trình duyệt.');status.textContent=data.message||'Đã mở cửa sổ trình duyệt.'}
- catch(e){status.textContent='Không mở được tự động: '+(e.message||'relay không hỗ trợ').replace(/[<>]/g,'');msg('Hãy dùng bản Manokara Desktop mới nhất để mở Transpose.')}
+async function launchTransposeWindow(target){const status=$('#transposeStatus');
+ const edge=/Edg\//.test(navigator.userAgent),store=edge?'https://microsoftedge.microsoft.com/addons/detail/transpose-%E2%96%B2%E2%96%BC-pitch-%E2%96%B9-spee/nakcigkhphkecnebinpgpdpbjfjgilkl':'https://chromewebstore.google.com/detail/transpose-pitch-%E2%96%B8-speed-%E2%96%B8/ioimlbgefgadofblnajllknopjboejda';
+ window.open(target==='install'?store:location.href,'_blank','noopener');status.textContent=target==='install'?'Extension store opened. Install it in this browser.':'Manokara opened in this browser profile.';
 }
 $('#transposeInstall').onclick=()=>launchTransposeWindow('install');
 $('#transposeOpen').onclick=()=>launchTransposeWindow('app');
@@ -228,16 +229,16 @@ updateCenterPreview();
 ['lsz','lcol','lfont','lfc','lbold','cdn','lfx','lcenter','lshape','lbgmode','ltheme'].forEach(i=>['input','change'].forEach(ev=>$('#'+i).addEventListener(ev,()=>{saveSet();if(i==='lfx')syncFxInputs();if(i==='lcenter'||i==='lshape')updateCenterPreview()})));
 window.addEventListener('resize',updateCenterPreview);
 syncFxInputs();
-$('#lwin').onclick=()=>{const popup=new URL('/manokara-obs.html',location.href);popup.searchParams.set('popup','1');popup.searchParams.set('room',relayRoom);const opened=window.open(popup.href,'kpt-lyrics','width=1280,height=720');if(!opened)msg('Popup blocked. Please allow popups.');else msg('Green-screen window opened. It shares the OBS effect output.');};
+$('#lwin').onclick=()=>{if(!relayInitialized){msg('Wait for the lyric relay to connect.');return}const opened=window.open(window.ManokaraSession.obsUrl(true),'kpt-lyrics','width=1280,height=720');if(!opened)msg('Popup blocked. Please allow popups.');else msg('Green-screen window opened. It shares the OBS effect output.');};
 let relayUp=null,publishPending=false;
 function setRelayStatus(ok,owned=true){const el=$('#relayStatus');if(!el)return;
  if(ok){el.textContent=owned?'OBS relay connected':'OBS relay active · another window controls lyrics';el.style.color=owned?'#16a34a':'#64748b'}
  else if(location.protocol==='file:'){el.innerHTML='OBS relay unavailable on file:// · <a href="http://localhost:8000/manokara.html">open server version</a>';el.style.color='#dc2626'}
- else if(location.protocol==='https:'){el.textContent='Cloud relay unavailable · check deployment';el.style.color='#dc2626'}
+ else if(location.protocol==='https:'){el.textContent='Lyric relay unavailable · check deployment';el.style.color='#dc2626'}
  else{el.textContent='OBS relay unavailable · start manokara_server.py';el.style.color='#dc2626'}
 }
 async function publishObsState(){
- if(publishPending)return;
+ if(publishPending||!relayInitialized)return;
  publishPending=true;
  try{
  const it=ci,custom=$('#lfc').value.trim().replace(/["<>]/g,'');
@@ -248,14 +249,17 @@ async function publishObsState(){
  const playing=!!(it&&!it.mc&&!counting&&!paused),track=it&&!it.mc?[it.title||'',it.lrc||'',it.e||it.ldur||180].join('|'):'';
  const rawTime=!counting&&it&&!it.mc?elapsed():0,time=stabilizeRelayClock(track,rawTime,playing)+(it&&!it.mc&&!counting?(it.off||0):0);
  const snapshot={writerId:relayPageId,ready:true,title:it&&!it.mc?it.title:'',lrc:it&&!it.mc?it.lrc||'':'',time,sampledAt:Date.now(),playing,paused:!!paused,counting:!!counting,countdownRemaining:remaining,duration:it?(it.e!=null?it.e-(it.s||0):(it.ldur||180)):0,mc:!!(it&&it.mc),memo:it&&it.mc?it.memo||'':'',size:+$('#lsz').value||64,foreground:$('#lcol').value,themeSeed,background:$('#lbgmode').value==='green'?'#00ff00':'transparent',transparent:$('#lbgmode').value!=='green',bold:$('#lbold').checked,font,googleFont,effect,centerFree:$('#lcenter').checked,centerShape:$('#lshape').value,colorTheme:$('#ltheme').value};
- const r=await fetch(relayUrl('/__lyric-state'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot)});if(r.status===409){if(relayUp!=='inactive')setRelayStatus(true,false);relayUp='inactive';return}if(!r.ok)throw Error('relay unavailable');await r.json();if(relayUp!==true)setRelayStatus(true);relayUp=true
+ const r=await window.ManokaraSession.api(relayUrl('/__lyric-state'),snapshot);if(r.status===409){if(relayUp!=='inactive')setRelayStatus(true,false);relayUp='inactive';return}if(!r.ok)throw Error('relay unavailable');await r.json();if(relayUp!==true)setRelayStatus(true);relayUp=true
  }
  catch(e){if(relayUp!==false)setRelayStatus(false);relayUp=false}
  finally{publishPending=false}
 }
 $('#copyobs').onclick=async()=>{try{await navigator.clipboard.writeText($('#obsurl').value);msg('OBS URL copied.')}catch(e){$('#obsurl').select();msg('Select and copy the OBS URL.')}};
+$('#rotateobs').onclick=async()=>{try{await window.ManokaraSession.rotate();$('#obsurl').value=window.ManokaraSession.obsUrl(false);msg('Previous OBS link revoked. Update your OBS Browser Source with this new URL.')}catch(e){msg(e.message)}};
+$('#logout').onclick=async()=>{const r=await window.ManokaraSession.api('/__logout',{});if(r.ok)location.replace('/manokara-login.html')};
 setInterval(publishObsState,200);
-publishObsState();
+relayReady.then(()=>publishObsState()).catch(e=>{setRelayStatus(false);msg(e.message)});
+setInterval(()=>{if(relayUp===true)relayServerAction('renew')},5000);
 var pickDur;
 /* right-hand lyrics panel */
 const P=$('#pan');let pk='',fs=16;
@@ -274,4 +278,4 @@ function tap(){const it=ci;if(!it||it.mc||!it.lrc){msg('Play a song with lyrics 
 $('#tap').onclick=tap;
 document.addEventListener('keydown',e=>{if(/^(INPUT|TEXTAREA)$/.test(e.target.tagName))return;if(e.key==='t'||e.key==='T')tap()});
 render();
-</script></body></html>
+</script><footer class="mu" style="padding:16px"><a href="/sources/FOLIA-MAJOR-NOTICE.txt">Folia notices</a> | <a href="/sources/FOLIA-MAJOR-SOURCE.zip">Folia source</a> | <a href="/sources/FOLIA-INTEGRATION-SOURCE/manokara-folia.tsx">Integration source</a> | <a href="/sources/JIZURA-LICENSE.txt">JIZURA license</a></footer></body></html>

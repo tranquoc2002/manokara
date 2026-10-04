@@ -1,0 +1,12 @@
+# Replace both occurrences of the UUID and the hostname.
+tunnel: replace-with-tunnel-uuid
+credentials-file: /etc/cloudflared/replace-with-tunnel-uuid.json
+metrics: 127.0.0.1:20241
+
+ingress:
+  - hostname: karaoke.example.com
+    service: http://127.0.0.1:8000
+    originRequest:
+      httpHostHeader: karaoke.example.com
+      connectTimeout: 10s
+  - service: http_status:404

@@ -15,6 +15,11 @@
           if (parsedUrl.pathname === '/__lyric-state') {
             const room = new URL(location.href).searchParams.get('room');
             if (room) { parsedUrl.searchParams.set('room', room); args[0] = parsedUrl.href; }
+            const token = new URLSearchParams(location.hash.slice(1)).get('view');
+            const options = {...(args[1] || {}), credentials: 'omit'};
+            const headers = new Headers(options.headers);
+            if (token) headers.set('Authorization', 'Bearer ' + token);
+            args[1] = {...options, headers};
           }
           const response = await nativeFetch(...args);
           try {
@@ -35,6 +40,10 @@
               pendingEffectAt = 0;
             }
             snapshot.effect = stableEffect;
+            // The parent owns visualizer changes and replaces this frame. Keep the
+            // mounted Pixi scene stable until navigation to avoid teardown/ticker races.
+            const frameEffect = new URL(location.href).searchParams.get('mode');
+            if (/^folia-(classic|cadenza|partita|fume|cappella|tilt|claddagh|monet|diorama|pendolo|sonnet|tempera|lumiere)$/.test(frameEffect || '')) snapshot.effect = frameEffect;
             const nextTrack = [snapshot.title || '', snapshot.lrc || '', snapshot.duration || 0].join('|');
             let nextTime = Number(snapshot.time) || 0;
             const isPlaying = !!snapshot.playing && !snapshot.paused;

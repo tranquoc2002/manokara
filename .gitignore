@@ -1,4 +1,10 @@
 /work/
-/outputs/__pycache__/
-/.wrangler/
-/public/
+__pycache__/
+*.py[cod]
+/.venv/
+/.pytest_cache/
+/.state/
+.env
+*.sqlite3
+*.sqlite3-*
+/test-results/

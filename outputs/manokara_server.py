@@ -1,163 +1,489 @@
-"""Local Manokara web server with a small lyric-state relay for OBS."""
+"""Authenticated Manokara relay. Run one Uvicorn worker behind cloudflared."""
 
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from threading import Lock
-from urllib.parse import urlsplit
+import asyncio
+import base64
+from collections import OrderedDict
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+import getpass
+import hashlib
+import hmac
+import ipaddress
 import json
 import os
-import subprocess
+from pathlib import Path
+import re
+import secrets
+import sqlite3
+import sys
+import time
+from urllib.parse import urlsplit
 
+from starlette.applications import Starlette
+from starlette.exceptions import HTTPException
+from starlette.requests import Request
+from starlette.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.routing import Route
+from starlette.concurrency import run_in_threadpool
 
 ROOT = Path(__file__).resolve().parent
-HOST = "127.0.0.1"
-PORT = 8000
-STATE = {"ready": False}
-STATE_LOCK = Lock()
-RELAY_LOCK = Lock()
-RELAY_WRITER_ID = None
-RELAY_WRITER_LOCKED = False
-APP_URL = f"http://localhost:{PORT}/manokara.html"
-DATA_ROOT = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Manokara"
+MAX_BODY = 262_144
+MAX_ROOMS = 128
+SESSION_SECONDS = 43_200
+WRITER_SECONDS = 15
+ROOM_ID = re.compile(r"^[a-f0-9]{32}$")
+EFFECTS = set("jizura tempera sonnet lumiere hanabi clean word-pop neon glitch".split()) | {
+    "folia-" + name for name in "classic cadenza partita fume cappella tilt claddagh monet diorama pendolo sonnet tempera lumiere".split()
+}
 
 
-def find_browser():
-    roots = [os.environ.get("PROGRAMFILES(X86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")]
-    candidates = []
-    for root in filter(None, roots):
-        candidates.extend([
-            Path(root) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
-            Path(root) / "Google" / "Chrome" / "Application" / "chrome.exe",
-        ])
-    return next((candidate for candidate in candidates if candidate.is_file()), None)
+def password_hash(password, salt=None):
+    salt = salt or secrets.token_hex(16)
+    key = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=32768, r=8, p=1, maxmem=67_108_864)
+    return f"scrypt:{salt}:{key.hex()}"
 
 
-class Handler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+def valid_password_hash(value):
+    return re.fullmatch(r"scrypt:[a-f0-9]{32}:[a-f0-9]{128}", value or "") is not None
 
-    def _json(self, payload, status=200):
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
 
-    def do_GET(self):
-        if urlsplit(self.path).path == "/__lyric-state":
-            with STATE_LOCK:
-                snapshot = dict(STATE)
-            self._json(snapshot)
-            return
-        super().do_GET()
+def verify_password(password, encoded):
+    return hmac.compare_digest(password_hash(password, encoded.split(":")[1]), encoded)
 
-    def do_POST(self):
-        global RELAY_WRITER_ID, RELAY_WRITER_LOCKED
-        route = urlsplit(self.path).path
-        if route == "/__lyric-owner":
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0 or length > 1024:
-                    self._json({"error": "Invalid request size."}, 413)
-                    return
-                payload = json.loads(self.rfile.read(length))
-                writer_id = payload.get("writerId") if isinstance(payload, dict) else None
-                action = payload.get("action") if isinstance(payload, dict) else None
-                if not isinstance(writer_id, str) or not writer_id or len(writer_id) > 128 or action not in ("claim", "renew", "release"):
-                    self._json({"error": "Invalid writer request."}, 400)
-                    return
-            except (ValueError, json.JSONDecodeError):
-                self._json({"error": "Invalid JSON."}, 400)
-                return
-            with RELAY_LOCK:
-                if action == "claim":
-                    RELAY_WRITER_LOCKED = True
-                    RELAY_WRITER_ID = writer_id
-                    accepted = True
-                elif action == "release":
-                    accepted = RELAY_WRITER_ID == writer_id
-                    if accepted:
-                        RELAY_WRITER_ID = None
-                else:
-                    accepted = RELAY_WRITER_ID == writer_id
-            self._json({"ok": accepted}, 200 if accepted else 409)
-            return
-        if route == "/__open-browser":
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0 or length > 1024:
-                    self._json({"error": "Invalid request size."}, 413)
-                    return
-                payload = json.loads(self.rfile.read(length))
-                target = payload.get("target") if isinstance(payload, dict) else None
-                if target not in ("app", "install"):
-                    self._json({"error": "Unknown browser destination."}, 400)
-                    return
-                browser = find_browser()
-                if browser is None:
-                    self._json({"error": "Microsoft Edge or Google Chrome was not found."}, 503)
-                    return
-                profile = DATA_ROOT / "BrowserProfile"
-                profile.mkdir(parents=True, exist_ok=True)
-                is_edge = browser.name.lower() == "msedge.exe"
-                store_url = (
-                    "https://microsoftedge.microsoft.com/addons/detail/transpose-%E2%96%B2%E2%96%BC-pitch-%E2%96%B9-spee/nakcigkhphkecnebinpgpdpbjfjgilkl"
-                    if is_edge else
-                    "https://chromewebstore.google.com/detail/transpose-pitch-%E2%96%B8-speed-%E2%96%B8/ioimlbgefgadofblnajllknopjboejda"
-                )
-                destination = store_url if target == "install" else APP_URL
-                subprocess.Popen([
-                    str(browser), f"--user-data-dir={profile}", "--new-window", destination,
-                ], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                self._json({"ok": True, "message": f"Đã mở {browser.parent.parent.name} với profile riêng của Manokara."})
-            except (ValueError, json.JSONDecodeError):
-                self._json({"error": "Invalid JSON."}, 400)
-            except OSError as error:
-                self._json({"error": f"Browser launch failed: {error}"}, 500)
-            return
-        if route != "/__lyric-state":
-            self.send_error(404)
-            return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > 1_000_000:
-                self.send_error(413)
-                return
-            payload = json.loads(self.rfile.read(length))
-            if not isinstance(payload, dict):
-                self.send_error(400)
-                return
-        except (ValueError, json.JSONDecodeError):
-            self.send_error(400)
-            return
-        writer_id = payload.get("writerId")
-        with RELAY_LOCK:
-            if isinstance(writer_id, str) and writer_id:
-                if not RELAY_WRITER_LOCKED:
-                    RELAY_WRITER_LOCKED = True
-                    RELAY_WRITER_ID = writer_id
-                accepted = RELAY_WRITER_ID == writer_id
-            else:
-                accepted = not RELAY_WRITER_LOCKED
+
+@dataclass(frozen=True)
+class Settings:
+    origin: str
+    password: str
+    data_dir: Path
+    allow_http: bool = False
+
+    def __post_init__(self):
+        url = urlsplit(self.origin)
+        if (url.scheme not in ("http", "https") or not url.hostname or url.username or url.password
+                or url.path or url.query or url.fragment or self.origin != self.origin.rstrip("/")):
+            raise ValueError("MANOKARA_ORIGIN must be an exact origin, e.g. https://karaoke.example.com (no trailing slash).")
+        if url.scheme != "https" and not (self.allow_http and url.hostname in ("localhost", "127.0.0.1", "::1")):
+            raise ValueError("HTTPS is required; MANOKARA_ALLOW_HTTP=1 permits local loopback development only.")
+        if not valid_password_hash(self.password):
+            raise ValueError("Set MANOKARA_PASSWORD_HASH using the hash-password command.")
+        _ = url.port
+        if self.data_dir.resolve().is_relative_to(ROOT):
+            raise ValueError("MANOKARA_DATA_DIR must be outside the web assets directory.")
+
+    @property
+    def secure(self):
+        return self.origin.startswith("https:")
+
+    @property
+    def cookie(self):
+        return "__Host-manokara_session" if self.secure else "manokara_session"
+
+    @classmethod
+    def from_env(cls):
+        return cls(os.environ.get("MANOKARA_ORIGIN", ""), os.environ.get("MANOKARA_PASSWORD_HASH", ""),
+                   Path(os.environ.get("MANOKARA_DATA_DIR", "/var/lib/manokara")),
+                   os.environ.get("MANOKARA_ALLOW_HTTP") == "1")
+
+
+class Store:
+    """Bounded persistent credentials/rooms; live playback deliberately stays in memory."""
+
+    def __init__(self, settings):
+        settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        db_path = settings.data_dir / "relay.sqlite3"
+        if db_path.is_symlink():
+            raise ValueError("The state database must not be a symlink.")
+        # All runtime DB access is synchronous on one ASGI event loop. TestClient starts its own thread.
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
+        os.chmod(db_path, 0o600)
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS sessions (digest TEXT PRIMARY KEY, expires REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, epoch INTEGER NOT NULL DEFAULT 0);
+        """)
+        self.db.execute("INSERT OR IGNORE INTO meta VALUES ('secret', ?)", (secrets.token_hex(32),))
+        self.secret = bytes.fromhex(self.db.execute("SELECT value FROM meta WHERE key='secret'").fetchone()[0])
+        fingerprint = hashlib.sha256(settings.password.encode()).hexdigest()
+        previous = self.db.execute("SELECT value FROM meta WHERE key='password'").fetchone()
+        if not previous or not hmac.compare_digest(previous[0], fingerprint):
+            self.db.execute("DELETE FROM sessions")
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('password', ?)", (fingerprint,))
+        self.db.execute("DELETE FROM sessions WHERE expires <= ?", (time.time(),))
+        self.db.commit()
+        self.live = {}
+
+    def session(self, token):
+        if not token or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+            return None
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        row = self.db.execute("SELECT expires FROM sessions WHERE digest=?", (digest,)).fetchone()
+        return digest if row and row[0] > time.time() else None
+
+    def login(self):
+        token = secrets.token_urlsafe(32)
+        self.db.execute("DELETE FROM sessions WHERE expires <= ?", (time.time(),))
+        self.db.execute("DELETE FROM sessions WHERE digest IN (SELECT digest FROM sessions ORDER BY expires DESC LIMIT -1 OFFSET 31)")
+        self.db.execute("INSERT INTO sessions VALUES (?, ?)", (hashlib.sha256(token.encode()).hexdigest(), time.time() + SESSION_SECONDS))
+        self.db.commit()
+        return token
+
+    def logout(self, digest):
+        self.db.execute("DELETE FROM sessions WHERE digest=?", (digest,))
+        self.db.commit()
+
+    def room(self, room_id):
+        if not isinstance(room_id, str) or not ROOM_ID.fullmatch(room_id):
+            raise HTTPException(404, "Room not found.")
+        row = self.db.execute("SELECT epoch FROM rooms WHERE id=?", (room_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Room not found.")
+        return row[0]
+
+    def create_room(self):
+        if self.db.execute("SELECT count(*) FROM rooms").fetchone()[0] >= MAX_ROOMS:
+            raise HTTPException(409, "Room limit reached. Delete an unused room before creating another.")
+        room_id = secrets.token_hex(16)
+        self.db.execute("INSERT INTO rooms (id) VALUES (?)", (room_id,))
+        self.db.commit()
+        return room_id
+
+    def view_token(self, room_id):
+        epoch = self.room(room_id)
+        return hmac.new(self.secret, f"view:{room_id}:{epoch}".encode(), hashlib.sha256).hexdigest()
+
+    def viewer(self, room_id, authorization):
+        expected = self.view_token(room_id)
+        token = authorization.removeprefix("Bearer ")
+        return authorization.startswith("Bearer ") and re.fullmatch(r"[a-f0-9]{64}", token) is not None and hmac.compare_digest(expected, token)
+
+
+class Limiter:
+    """Token buckets with bounded memory; clock is injectable for security tests."""
+
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.buckets = OrderedDict()
+
+    def check(self, key, rate, burst):
+        now = self.clock()
+        tokens, updated = self.buckets.pop(key, (float(burst), now))
+        tokens = min(burst, tokens + (now - updated) * rate)
+        accepted = tokens >= 1
+        self.buckets[key] = (tokens - 1 if accepted else tokens, now)
+        if len(self.buckets) > 10_000:
+            self.buckets.popitem(last=False)
         if not accepted:
-            self._json({"error": "Another Manokara window currently owns the lyric relay."}, 409)
-            return
-        with STATE_LOCK:
-            STATE.clear()
-            STATE.update(payload)
-        self._json({"ok": True})
+            raise HTTPException(429, "Too many requests. Try again shortly.", headers={"Retry-After": "15"})
+
+
+async def read_json(request, limit=MAX_BODY):
+    if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+        raise HTTPException(415, "Content-Type must be application/json.")
+    try:
+        declared = int(request.headers.get("content-length", "0"))
+        if declared < 0:
+            raise ValueError
+    except ValueError:
+        raise HTTPException(400, "Invalid Content-Length.")
+    if declared > limit:
+        raise HTTPException(413, "Request body too large.")
+    body = bytearray()
+    try:
+        async with asyncio.timeout(5):
+            async for chunk in request.stream():
+                body.extend(chunk)
+                if len(body) > limit:
+                    raise HTTPException(413, "Request body too large.")
+        value = json.loads(body, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+    except TimeoutError:
+        raise HTTPException(408, "Request body timed out.")
+    except (ValueError, RecursionError):
+        raise HTTPException(400, "Invalid JSON.")
+    if not isinstance(value, dict):
+        raise HTTPException(400, "Expected a JSON object.")
+    return value
+
+
+def snapshot(payload):
+    strings = {"writerId": 128, "title": 512, "lrc": 200_000, "memo": 4096,
+               "font": 256, "googleFont": 128, "foreground": 9, "background": 16,
+               "effect": 32, "centerShape": 8, "colorTheme": 12}
+    numbers = {"time": (-86400, 604800), "sampledAt": (0, 100_000_000_000_000),
+               "countdownRemaining": (0, 60), "duration": (0, 604800), "size": (24, 160),
+               "themeSeed": (0, 4_294_967_295)}
+    booleans = set("ready playing paused counting mc transparent bold centerFree".split())
+    if set(payload) - (strings.keys() | numbers.keys() | booleans):
+        raise HTTPException(400, "Unknown lyric state field.")
+    for name, limit in strings.items():
+        if name in payload and (not isinstance(payload[name], str) or len(payload[name]) > limit):
+            raise HTTPException(400, f"Invalid {name}.")
+    for name, (low, high) in numbers.items():
+        if name in payload and (type(payload[name]) not in (int, float) or not low <= payload[name] <= high):
+            raise HTTPException(400, f"Invalid {name}.")
+    for name in booleans:
+        if name in payload and type(payload[name]) is not bool:
+            raise HTTPException(400, f"Invalid {name}.")
+    if not payload.get("writerId"):
+        raise HTTPException(400, "writerId is required.")
+    if payload.get("effect", "clean") not in EFFECTS:
+        raise HTTPException(400, "Unknown visualizer.")
+    if payload.get("centerShape", "auto") not in ("auto", "wide", "tall"):
+        raise HTTPException(400, "Unknown centre shape.")
+    if payload.get("colorTheme", "effect") not in ("effect", "white", "cyan", "rose", "amber", "violet", "mint"):
+        raise HTTPException(400, "Unknown colour theme.")
+    for name in ("foreground", "background"):
+        if name in payload and not (re.fullmatch(r"#[a-fA-F0-9]{6}", payload[name]) or name == "background" and payload[name] == "transparent"):
+            raise HTTPException(400, f"Invalid {name}.")
+    return payload
+
+
+def asset_manifest():
+    names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
+             "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
+             "manokara-login.html", "manokara-login.js", "manokara-session.js"]
+    result = {"/" + name: ROOT / name for name in names}
+    for file in (ROOT / "folia-assets").iterdir():
+        if file.suffix in (".js", ".css", ".png") and file.is_file():
+            result["/folia-assets/" + file.name] = file
+    # Explicit source/notice downloads; arbitrary files and the Python server are never assets.
+    for name in ("FOLIA-MAJOR-SOURCE.zip", "FOLIA-MAJOR-LICENSE.txt", "FOLIA-MAJOR-NOTICE.txt", "JIZURA-LICENSE.txt", "JIZURA-THIRD-PARTY-NOTICES.md"):
+        result["/sources/" + name] = ROOT / name
+    for name in ("manokara-folia.tsx", "manokara-folia.html", "manokara-folia.css"):
+        result["/sources/FOLIA-INTEGRATION-SOURCE/" + name] = ROOT / "FOLIA-INTEGRATION-SOURCE" / name
+    return result
+
+
+def safe_asset(path):
+    return path.is_file() and path.resolve().is_relative_to(ROOT) and not any(
+        part.is_symlink() for part in (path, *path.parents) if part.is_relative_to(ROOT)
+    )
+
+
+def csp_for(path):
+    hashes = []
+    if path and path.suffix == ".html" and safe_asset(path):
+        for attributes, code in re.findall(r"<script\b([^>]*)>(.*?)</script>", path.read_text(encoding="utf-8"), re.S | re.I):
+            if not re.search(r"\bsrc\s*=", attributes, re.I):
+                digest = base64.b64encode(hashlib.sha256(code.encode()).digest()).decode()
+                hashes.append(f"'sha256-{digest}'")
+    # The bundled Pixi renderer generates uniform/shader functions at runtime.
+    # Scope that exception to Folia's viewer document, never the controller/login.
+    pixi_eval = " 'unsafe-eval'" if path == ROOT / "manokara-folia.html" else ""
+    pixi_connect = " data: blob:" if path == ROOT / "manokara-folia.html" else ""
+    return "; ".join([
+        "default-src 'none'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'self'",
+        "form-action 'self'", "script-src 'self' " + " ".join(hashes) + pixi_eval + " https://www.youtube.com https://s.ytimg.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdmirror.cn/npm/@fontsource/",
+        "img-src 'self' data: blob: https:", "media-src 'self' blob: https:",
+        "connect-src 'self' https://lrclib.net https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com" + pixi_connect,
+        "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com", "worker-src 'self' blob:",
+    ])
+
+
+class SecurityHeaders:
+    def __init__(self, app, settings, manifest):
+        self.app, self.settings = app, settings
+        self.policies = {url: csp_for(path) for url, path in manifest.items() if path.suffix == ".html"}
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        async def secure_send(message):
+            if message["type"] == "http.response.start":
+                headers = {k.lower(): v for k, v in message.get("headers", [])}
+                headers.update({
+                    b"cache-control": b"no-store", b"x-content-type-options": b"nosniff",
+                    b"referrer-policy": b"strict-origin-when-cross-origin", b"x-frame-options": b"SAMEORIGIN",
+                    b"content-security-policy": self.policies.get(scope["path"], csp_for(None)).encode(),
+                    b"permissions-policy": b"camera=(), microphone=(), geolocation=()",
+                })
+                if self.settings.secure:
+                    headers[b"strict-transport-security"] = b"max-age=31536000"
+                message["headers"] = list(headers.items())
+            await send(message)
+
+        request = Request(scope)
+        if request.headers.get("host", "").lower() != urlsplit(self.settings.origin).netloc.lower():
+            return await JSONResponse({"error": "Invalid host."}, 400)(scope, receive, secure_send)
+        if scope["method"] not in ("GET", "HEAD", "POST"):
+            return await JSONResponse({"error": "Method not allowed."}, 405)(scope, receive, secure_send)
+        if scope["method"] == "POST" and request.headers.get("origin") != self.settings.origin:
+            return await JSONResponse({"error": "Invalid origin."}, 403)(scope, receive, secure_send)
+        await self.app(scope, receive, secure_send)
+
+
+def create_app(settings=None):
+    settings = settings or Settings.from_env()
+    store, limiter = Store(settings), Limiter()
+    password_slots = asyncio.Semaphore(2)
+    manifest = asset_manifest()
+
+    def operator(request):
+        digest = store.session(request.cookies.get(settings.cookie))
+        if not digest:
+            raise HTTPException(401, "Sign in to control Manokara.")
+        return digest
+
+    def client_ip(request):
+        peer = request.client.host if request.client else "unknown"
+        if peer in ("127.0.0.1", "::1"):
+            try:
+                return str(ipaddress.ip_address(request.headers.get("cf-connecting-ip", peer)))
+            except ValueError:
+                return peer
+        return peer
+
+    async def login(request):
+        limiter.check(("login", client_ip(request)), 5 / 60, 5)
+        limiter.check("login-global", 20 / 60, 20)
+        payload = await read_json(request, 2048)
+        password = payload.get("password")
+        if not isinstance(password, str) or not 1 <= len(password) <= 1024:
+            raise HTTPException(400, "Invalid password.")
+        # Bound scrypt memory even when several login requests arrive together.
+        async with password_slots:
+            accepted = await run_in_threadpool(verify_password, password, settings.password)
+        if not accepted:
+            raise HTTPException(401, "Incorrect password.")
+        response = JSONResponse({"ok": True})
+        response.set_cookie(settings.cookie, store.login(), max_age=SESSION_SECONDS, httponly=True,
+                            secure=settings.secure, samesite="strict", path="/")
+        return response
+
+    async def logout(request):
+        store.logout(operator(request))
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(settings.cookie, path="/", secure=settings.secure, httponly=True, samesite="strict")
+        return response
+
+    async def room_info(request):
+        digest = operator(request)
+        limiter.check(("room", digest), 1, 10)
+        payload = await read_json(request, 1024)
+        room_id = payload.get("room")
+        if room_id is None:
+            room_id = store.create_room()
+        else:
+            store.room(room_id)
+        return JSONResponse({"room": room_id, "viewToken": store.view_token(room_id)})
+
+    async def room_change(request):
+        digest = operator(request)
+        limiter.check(("room", digest), 1, 10)
+        payload = await read_json(request, 1024)
+        room_id = payload.get("room")
+        store.room(room_id)
+        if request.url.path == "/__room/rotate":
+            store.db.execute("UPDATE rooms SET epoch=epoch+1 WHERE id=?", (room_id,))
+            store.db.commit()
+            return JSONResponse({"room": room_id, "viewToken": store.view_token(room_id)})
+        store.db.execute("DELETE FROM rooms WHERE id=?", (room_id,))
+        store.db.commit()
+        store.live.pop(room_id, None)
+        return JSONResponse({"ok": True})
+
+    def live_room(room_id):
+        return store.live.setdefault(room_id, {"owner": None, "until": 0, "snapshot": {"ready": False}})
+
+    async def relay_owner(request):
+        digest = operator(request)
+        limiter.check(("owner", digest), 10, 30)
+        room_id = request.query_params.get("room")
+        store.room(room_id)
+        payload = await read_json(request, 1024)
+        writer, action = payload.get("writerId"), payload.get("action")
+        if not isinstance(writer, str) or not 1 <= len(writer) <= 128 or action not in ("claim", "renew", "release"):
+            raise HTTPException(400, "Invalid writer request.")
+        room = live_room(room_id)
+        accepted = action == "claim" or (room["owner"] == writer and room["until"] > time.monotonic())
+        if accepted:
+            room["owner"] = None if action == "release" else writer
+            room["until"] = time.monotonic() + WRITER_SECONDS
+        return JSONResponse({"ok": accepted}, 200 if accepted else 409)
+
+    async def relay_state(request):
+        room_id = request.query_params.get("room")
+        if request.method in ("GET", "HEAD"):
+            store.room(room_id)
+            if not store.session(request.cookies.get(settings.cookie)) and not store.viewer(room_id, request.headers.get("authorization", "")):
+                raise HTTPException(401, "A valid OBS link or operator login is required.")
+            limiter.check(("read", room_id), 40, 100)
+            return JSONResponse(live_room(room_id)["snapshot"])
+        digest = operator(request)
+        limiter.check(("write", digest), 10, 30)
+        store.room(room_id)
+        payload = snapshot(await read_json(request))
+        room = live_room(room_id)
+        # An authenticated controller can recover automatically after restart/lease expiry.
+        # No await occurs between checking ownership and updating the room.
+        if room["owner"] is None or room["until"] <= time.monotonic():
+            room["owner"] = payload["writerId"]
+        if room["owner"] != payload["writerId"]:
+            raise HTTPException(409, "Another window controls this room. Click the app to take control.")
+        room["until"] = time.monotonic() + WRITER_SECONDS
+        room["snapshot"] = {key: value for key, value in payload.items() if key != "writerId"}
+        return JSONResponse({"ok": True})
+
+    async def health(request):
+        return JSONResponse({"ok": True})
+
+    async def assets(request):
+        path = request.url.path
+        if path in ("/", "/manokara.html") and not store.session(request.cookies.get(settings.cookie)):
+            return RedirectResponse("/manokara-login.html", status_code=303)
+        if path == "/":
+            return RedirectResponse("/manokara.html", status_code=303)
+        file = manifest.get(path)
+        if not file or not safe_asset(file):
+            raise HTTPException(404, "Not found.")
+        media = "text/plain; charset=utf-8" if path.startswith("/sources/") and file.suffix in (".txt", ".md", ".tsx") else None
+        return FileResponse(file, media_type=media)
+
+    async def http_error(request, error):
+        return JSONResponse({"error": error.detail}, error.status_code, headers=error.headers)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        yield
+        store.db.close()
+
+    app = Starlette(routes=[
+        Route("/__login", login, methods=["POST"]), Route("/__logout", logout, methods=["POST"]),
+        Route("/__room", room_info, methods=["POST"]), Route("/__room/rotate", room_change, methods=["POST"]),
+        Route("/__room/delete", room_change, methods=["POST"]),
+        Route("/__lyric-owner", relay_owner, methods=["POST"]),
+        Route("/__lyric-state", relay_state, methods=["GET", "POST"]),
+        Route("/healthz", health, methods=["GET"]), Route("/{path:path}", assets, methods=["GET", "HEAD"]),
+    ], exception_handlers={HTTPException: http_error}, lifespan=lifespan)
+    app.state.store, app.state.limiter, app.state.settings = store, limiter, settings
+    app.add_middleware(SecurityHeaders, settings=settings, manifest=manifest)
+    return app
+
+
+def main():
+    if sys.argv[1:] == ["hash-password"]:
+        password = getpass.getpass("Operator password (at least 16 characters): ")
+        if len(password) < 16 or len(password) > 1024:
+            raise SystemExit("Use a password between 16 and 1024 characters.")
+        if password != getpass.getpass("Repeat password: "):
+            raise SystemExit("Passwords did not match.")
+        print(password_hash(password))
+        return
+    if sys.argv[1:]:
+        raise SystemExit("Usage: python outputs/manokara_server.py [hash-password]")
+    import uvicorn
+    try:
+        app = create_app()
+    except ValueError as error:
+        raise SystemExit(str(error))
+    uvicorn.run(app, host="127.0.0.1", port=8000, workers=1, proxy_headers=False,
+                server_header=False, access_log=False, limit_concurrency=64, backlog=128,
+                timeout_keep_alive=5, timeout_graceful_shutdown=10, ws="none", http="h11",
+                h11_max_incomplete_event_size=16384)
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Manokara is serving {ROOT} at http://localhost:{PORT}/manokara.html")
-    print("OBS lyric output: http://localhost:8000/manokara-obs.html")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nManokara server stopped.")
-    finally:
-        server.server_close()
+    main()

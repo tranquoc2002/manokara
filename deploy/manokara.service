@@ -1,0 +1,43 @@
+[Unit]
+Description=Manokara authenticated karaoke relay
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=manokara
+Group=manokara
+WorkingDirectory=/opt/manokara
+EnvironmentFile=/etc/manokara/manokara.env
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ExecStart=/opt/manokara/.venv/bin/python /opt/manokara/outputs/manokara_server.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+StateDirectory=manokara
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+MemoryMax=512M
+TasksMax=96
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target
