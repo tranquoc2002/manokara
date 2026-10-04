@@ -24,6 +24,16 @@ After updating these files, restart the Python server and reload the controller 
 
 ## Finding and importing lyrics
 
+### Find a video from the header
+
+Type a song or artist into the header search. After two characters and a short pause, a dropdown shows up to eight YouTube videos with thumbnails, channels and available durations. For a one-character title, press Enter. **Karaoke** prefers backing-track versions and can be switched off; the preference is remembered. Use ↑/↓ and Enter, or click a result. The selected video's link and title fill the Song editor; you can find lyrics and **Add to setlist** from there. Replacing a draft with unsaved edits asks first, and the current playback continues.
+
+Search runs on the Python backend using yt-dlp's [flat search metadata](https://github.com/yt-dlp/yt-dlp#usage-and-options); no YouTube API key is needed. The server needs `yt-dlp` on PATH (already part of the VPS setup), or the `yt_dlp` package in its Python environment. Search also works when the video streaming fallback is disabled and does not require FFmpeg/Deno or download media. It uses two bounded lookup processes, short-lived result caches and request limits, separately from video playback lookups. If YouTube is temporarily unavailable, the dropdown offers **Search on YouTube**.
+
+For a local environment without yt-dlp, install it with `.venv\Scripts\python.exe -m pip install -U yt-dlp`. Restart the Python server after updating the search assets and reload the page.
+
+### Find and import lyrics
+
 - **Find lyrics** searches LRCLIB and returns lyrics directly in Manokara.
 - **Lyricsify ↗** opens a search using the song/artist field. Download the matching `.lrc` there and use **Import LRC**, drop it on the lyric editor, or paste the copied text. This is an external search fallback, not an automated scraper/API integration.
 - Imports retain the original LRC tags. Auto encoding handles UTF-8, BOM-marked UTF-16 and Shift_JIS; an encoding selector is available if needed. Title and duration metadata fill empty fields. Choose the recording/version that matches your karaoke audio and adjust Live sync if needed.

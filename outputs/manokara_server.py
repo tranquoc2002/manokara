@@ -257,6 +257,7 @@ def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
              "manokara-ui.css", "manokara-icons.svg",
              "manokara-i18n.js", "manokara-tour.js", "manokara-tour.css",
+             "manokara-search.js", "manokara-search.css",
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
              "manokara-session.js", "manokara-core.js",
              "manokara-lyrics.js", "manokara-lyrics-editor.js", "manokara-romaji-worker.js",
@@ -544,6 +545,19 @@ def create_app(settings=None):
         store.room(room_id, digest)
         return JSONResponse(result)
 
+    async def youtube_search(request):
+        digest = browser_session(request)
+        room_id = request.query_params.get("room")
+        store.room(room_id, digest)
+        payload = await read_json(request, 2048)
+        if set(payload) != {"query", "karaoke"}:
+            raise HTTPException(400, "Send a search query and karaoke preference.")
+        limiter.check(("youtube-search", digest), 18 / 60, 6)
+        limiter.check("youtube-search-global", 2, 8)
+        result = await media_service.search(payload["query"], payload["karaoke"])
+        store.room(room_id, digest)
+        return JSONResponse(result)
+
     async def youtube_media(request):
         digest = browser_session(request)
         room_id = request.query_params.get("room")
@@ -601,6 +615,7 @@ def create_app(settings=None):
         Route("/__lyric-state", relay_state, methods=["GET", "POST"]),
         Route("/__youtube", youtube_lookup, methods=["POST"]),
         Route("/__youtube/title", youtube_title, methods=["POST"]),
+        Route("/__youtube/search", youtube_search, methods=["POST"]),
         Route("/__youtube/media", youtube_media, methods=["GET", "HEAD"]),
         Route("/healthz", health, methods=["GET"]), Route("/{path:path}", assets, methods=["GET", "HEAD"]),
     ], exception_handlers={HTTPException: http_error}, lifespan=lifespan)

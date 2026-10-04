@@ -1,7 +1,9 @@
 """Optional YouTube video relay: bounded processes and pipes, never media files."""
 
 import asyncio
+from collections import OrderedDict
 from dataclasses import dataclass
+import importlib.util
 import ipaddress
 import json
 import math
@@ -12,6 +14,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import time
 from urllib.parse import urlsplit
 
@@ -151,6 +154,8 @@ class MediaService:
         self.tickets = {}
         self.processes = set()
         self.active = {}
+        self.searches = asyncio.Semaphore(2)
+        self.search_cache = OrderedDict()
 
     async def spawn(self, args):
         options = {"start_new_session": True} if os.name != "nt" else {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -174,12 +179,12 @@ class MediaService:
             await process.wait()
             self.processes.discard(process)
 
-    async def capture(self, args):
+    async def capture(self, args, *, timeout=45):
         process = await self.spawn(args)
         try:
             process.stdin.close()
             data = bytearray()
-            async with asyncio.timeout(45):
+            async with asyncio.timeout(timeout):
                 while block := await process.stdout.read(65536):
                     data.extend(block)
                     if len(data) > MAX_METADATA:
@@ -212,6 +217,66 @@ class MediaService:
         if not title:
             raise HTTPException(502, "YouTube returned no video title.")
         return {"title": title}
+
+    async def search(self, query, karaoke=True):
+        # A search prefix is fixed by the server; user text is never parsed as a URL or shell command.
+        if (not isinstance(query, str) or not 1 <= len(query.strip()) <= 160
+                or re.search(r"[\x00-\x1f\x7f]", query) or type(karaoke) is not bool):
+            raise HTTPException(400, "Enter a song or artist name (1–160 characters).")
+        query = " ".join(query.split())
+        if karaoke and "karaoke" not in query.casefold() and "カラオケ" not in query:
+            query += " karaoke"
+        key = query.casefold()
+        cached = self.search_cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            self.search_cache.move_to_end(key)
+            return {"results": cached[1]}
+        executable = shutil.which(self.settings.executable)
+        if executable:
+            launcher = [executable]
+        elif self.settings.executable == "yt-dlp" and importlib.util.find_spec("yt_dlp"):
+            launcher = [sys.executable, "-m", "yt_dlp"]
+        else:
+            raise HTTPException(503, "YouTube search needs yt-dlp on the server. You can still search on YouTube.")
+        if self.searches.locked():
+            raise HTTPException(429, "YouTube search is busy. Try again in a moment.")
+        # Flat metadata only: no media extraction, cookies, FFmpeg, downloads or JS runtime required.
+        args = launcher + ["--ignore-config", "--no-plugin-dirs", "--no-cache-dir",
+            "--no-cookies", "--no-cookies-from-browser", "--socket-timeout", "8", "--retries", "0",
+            "--extractor-retries", "0", "--flat-playlist", "--skip-download", "--dump-single-json",
+            "--quiet", "--no-warnings", "--use-extractors", "^youtube:search$", "--proxy", "",
+            "--", "ytsearch8:" + query]
+        async with self.searches:
+            try:
+                info = await self.capture(args, timeout=18)
+            except OSError:
+                raise HTTPException(503, "YouTube search needs a working yt-dlp installation on the server.") from None
+            except HTTPException:
+                raise HTTPException(502, "YouTube search is temporarily unavailable. Try again or search on YouTube.") from None
+        entries = info.get("entries") if isinstance(info, dict) else None
+        if not isinstance(entries, list):
+            raise HTTPException(502, "YouTube search is temporarily unavailable. Try again or search on YouTube.")
+        results, seen = [], set()
+        for entry in entries[:8]:
+            if not isinstance(entry, dict):
+                continue
+            video_id, title = entry.get("id"), clean_title(entry.get("title"))
+            if (not isinstance(video_id, str) or not VIDEO_ID.fullmatch(video_id) or not title or video_id in seen
+                    or entry.get("is_live") or entry.get("live_status") in ("is_live", "is_upcoming")
+                    or entry.get("availability") in ("private", "premium_only", "subscriber_only", "needs_auth")
+                    or entry.get("has_drm") or (isinstance(entry.get("age_limit"), (int, float)) and entry["age_limit"] > 0)):
+                continue
+            duration = entry.get("duration")
+            if type(duration) not in (int, float) or not math.isfinite(duration) or duration <= 0:
+                duration = None
+            seen.add(video_id)
+            results.append({"id": video_id, "title": title,
+                "channel": clean_title(entry.get("channel") or entry.get("uploader"))[:160], "duration": duration})
+        self.search_cache[key] = (time.monotonic() + 120, results)
+        self.search_cache.move_to_end(key)
+        while len(self.search_cache) > 128:
+            self.search_cache.popitem(last=False)
+        return {"results": results}
 
     async def resolve(self, video_id, room_id, digest):
         info = await self.lookup(video_id)
@@ -297,6 +362,7 @@ class MediaService:
         for process in list(self.processes):
             await self.stop(process)
         self.tickets.clear()
+        self.search_cache.clear()
 
 
 class MediaResponse(StreamingResponse):

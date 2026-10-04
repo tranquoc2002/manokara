@@ -2,6 +2,22 @@
 (() => {
   'use strict';
   const vi = {
+    'Find music on YouTube':'Tìm nhạc trên YouTube', 'Find a song on YouTube…':'Tìm bài hát trên YouTube…', 'Find a song on YouTube':'Tìm bài hát trên YouTube',
+    'Prefer karaoke versions':'Ưu tiên phiên bản karaoke', 'Search YouTube':'Tìm trên YouTube', 'Close search results':'Đóng kết quả tìm kiếm', 'YouTube search results':'Kết quả tìm trên YouTube',
+    '↑ ↓ to choose · Enter to select':'↑ ↓ để chọn · Enter để dùng', 'Search on YouTube':'Mở tìm trên YouTube',
+    'Type a song or artist. Search starts after 2 characters.':'Gõ tên bài hoặc ca sĩ. Từ 2 ký tự là tự tìm; tên ngắn hơn thì bấm Enter nhé.',
+    'Searching YouTube…':'Đang tìm trên YouTube…', 'Choose a video to fill the song editor.':'Chọn một video để điền vào phần thêm bài hát.',
+    'No matching videos. Try another name.':'Chưa tìm thấy video phù hợp. Thử tên khác nhé.',
+    'Restart the updated server to enable YouTube search.':'Khởi động lại máy chủ sau khi cập nhật để dùng tìm kiếm YouTube nhé.',
+    'YouTube search is temporarily unavailable. Try again or search on YouTube.':'Chưa tìm được trên YouTube lúc này. Thử lại hoặc bấm Mở tìm trên YouTube nhé.',
+    'YouTube search took too long. Try again.':'YouTube trả lời hơi lâu. Thử lại nhé.', 'Could not connect. Check your connection and try again.':'Chưa kết nối được. Kiểm tra mạng rồi thử lại nhé.',
+    'YouTube search needs yt-dlp on the server. You can still search on YouTube.':'Máy chủ cần cài yt-dlp để tìm ngay trong app. Bạn vẫn có thể bấm Mở tìm trên YouTube nhé.',
+    'YouTube search needs a working yt-dlp installation on the server.':'yt-dlp trên máy chủ chưa chạy được. Kiểm tra cài đặt rồi thử lại nhé.',
+    'YouTube search is busy. Try again in a moment.':'Tìm kiếm YouTube đang bận. Chờ một chút rồi thử lại nhé.',
+    'Enter a song or artist name (1–160 characters).':'Nhập tên bài hoặc ca sĩ, dài từ 1 đến 160 ký tự nhé.',
+    'Too many requests. Try again shortly.':'Bạn tìm hơi nhanh rồi. Chờ một chút và thử lại nhé.',
+    'Replace the current song draft with this video? Unsaved edits will be discarded.':'Đổi bài đang soạn sang video này nhé? Phần sửa chưa lưu sẽ bị bỏ.',
+    'Video selected. Find lyrics if you like, then Add to setlist.':'Đã chọn video. Bạn có thể tìm thêm lời rồi bấm Thêm vào danh sách nhé.',
     'Manokara — your karaoke studio':'Manokara — góc hát của bạn',
     'Skip to studio':'Đi đến khu vực hát',
     'Connecting to OBS…':'Đang kết nối OBS…', 'Connecting…':'Đang kết nối…',

@@ -1,0 +1,48 @@
+.app-header { gap:18px; }
+.header-search { position:relative; flex:1; min-width:170px; max-width:460px; margin-inline:auto; }
+.music-search-form { display:flex; align-items:center; gap:8px; min-height:36px; padding:0 5px 0 11px; border:1px solid var(--line); background:var(--input); border-radius:11px; }
+.music-search-form:focus-within { border-color:var(--ac); box-shadow:0 0 0 2px var(--soft); }
+.music-search-form>.icon,.music-search-form>[data-icon] { width:17px; height:17px; flex-shrink:0; color:var(--mu); }
+#musicSearch { min-width:0; width:100%; padding:7px 0; font-size:12px; border:0; background:transparent; outline:none; box-shadow:none; }
+#musicSearch::-webkit-search-cancel-button { cursor:pointer; }
+.karaoke-search-toggle { display:flex; align-items:center; gap:5px; flex-shrink:0; font-size:10px; color:var(--mu); cursor:pointer; }
+.karaoke-search-toggle input { width:13px; height:13px; margin:0; }
+.music-search-form button { width:27px; min-height:27px; padding:5px; flex-shrink:0; }
+.music-search-menu { position:absolute; top:calc(100% + 8px); left:0; width:max(100%,430px); max-width:calc(100vw - 32px); z-index:120; display:flex; flex-direction:column; padding:8px; border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--fg); box-shadow:0 14px 45px rgb(0 0 0 / .24); overflow:hidden; }
+.music-search-heading { display:flex; align-items:center; gap:8px; padding:3px 4px 8px 8px; flex-shrink:0; }
+#musicSearchStatus { flex:1; min-width:0; color:var(--mu); font-size:12px; line-height:1.5; }
+.music-search-heading button { min-height:28px; width:28px; padding:5px; flex-shrink:0; }
+.youtube-results { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.youtube-result { display:flex; align-items:center; gap:11px; padding:8px; border-radius:9px; cursor:pointer; }
+.youtube-result:hover,.youtube-result[aria-selected="true"] { background:var(--soft); }
+.youtube-result[aria-selected="true"] { outline:1px solid var(--ac); outline-offset:-1px; }
+.youtube-thumbnail { position:relative; width:105px; aspect-ratio:16/9; background:var(--soft); border-radius:7px; overflow:hidden; flex-shrink:0; }
+.youtube-thumbnail img { display:block; width:100%; height:100%; object-fit:cover; }
+.youtube-thumbnail>span { position:absolute; bottom:3px; right:3px; padding:1px 4px; background:rgb(0 0 0 / .8); color:#fff; font-size:10px; border-radius:3px; }
+.youtube-result-copy { min-width:0; flex:1; }
+.youtube-result-copy strong { font-size:12px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.youtube-result-copy small { display:block; font-size:11px; color:var(--mu); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.youtube-select { color:var(--mu); font-size:15px; }
+.music-search-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:5px 10px; padding:10px 8px 3px; border-top:1px solid var(--line); flex-shrink:0; }
+.music-search-footer small { font-size:10px; color:var(--mu); }
+.music-search-footer a { display:inline-flex; align-items:center; gap:4px; font-size:11px; }
+.music-search-footer .icon { width:13px; height:13px; }
+.music-search-menu [aria-busy="true"] { min-height:4px; }
+@media (max-width:1280px) {
+  .header-actions .connection { display:none; }
+}
+@media (max-width:1000px) and (min-width:851px) {
+  .karaoke-search-toggle span { display:none; }
+}
+@media (max-width:850px) {
+  .header-search { order:3; flex-basis:100%; max-width:none; margin-bottom:3px; }
+  #musicSearch { font-size:16px; }
+  .music-search-menu { width:100%; }
+  .music-search-form { min-height:40px; }
+}
+@media (max-width:480px) {
+  .app-header { column-gap:8px; }
+  .youtube-thumbnail { width:84px; }
+  .youtube-result { gap:8px; padding:7px 5px; }
+  .music-search-menu { max-width:calc(100vw - 20px); }
+}

@@ -142,6 +142,8 @@ Cloudflare documents its streaming content-type requirement in [Tunnel troublesh
 
 Deploy the updated `outputs/manokara.html`, `outputs/manokara-obs.html`, `outputs/manokara_server.py`, `outputs/manokara-ui.css`, `outputs/manokara-icons.svg` and the entire `outputs/ui-assets/` directory together. Restart your existing Python process using your start script and reload the page and OBS source. Fonts and icons are prebuilt and served by Python; no new service or build step is needed on the VPS. Keep the other existing output assets when updating.
 
+The header's YouTube search also needs the updated `outputs/manokara_media.py`, `outputs/manokara-search.js`, `outputs/manokara-search.css` and `outputs/manokara-i18n.js`. Keep the guide assets (`manokara-tour.js` / `.css`) too. The VPS setup already installs yt-dlp, which search uses without an API key. Flat searches do not depend on `MANOKARA_YTDLP_ENABLED`, FFmpeg or a JavaScript runtime. If yt-dlp is absent, install it on PATH or in the server's Python environment with `.venv/bin/python -m pip install -U yt-dlp`. No cookie sharing is used for search. YouTube can still reject or temporarily throttle requests; the dropdown retains an external YouTube search link.
+
 ## Source and notices
 
 The public `/sources/` URLs deliberately expose the bundled Folia source archive, its integration source, and third-party licenses/notices. Links are available from the controller page. Keep them when deploying updates. Arbitrary directories, Python source, dotfiles, and symlinked files are not served. See the bundled Folia notice for upstream licensing and usage terms.
