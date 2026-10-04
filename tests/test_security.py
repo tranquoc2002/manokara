@@ -12,6 +12,7 @@ spec = importlib.util.spec_from_file_location("manokara_server", Path(__file__).
 server = importlib.util.module_from_spec(spec)
 # dataclasses uses the module registry when resolving annotations.
 import sys
+sys.path.insert(0, str(Path(__file__).parents[1] / "outputs"))
 sys.modules[spec.name] = server
 spec.loader.exec_module(server)
 
@@ -261,7 +262,7 @@ def test_frontend_default_snapshot_is_accepted(client):
 
 
 def test_static_files_are_allowlisted_and_headers_present(client, tmp_path, monkeypatch):
-    for path in ("/manokara_server.py", "/.env", "/folia-assets/", "/FOLIA-INTEGRATION-SOURCE/", "/README.md", "/__open-browser"):
+    for path in ("/manokara_server.py", "/manokara_media.py", "/.env", "/folia-assets/", "/FOLIA-INTEGRATION-SOURCE/", "/README.md", "/__open-browser"):
         assert client.get(path).status_code == 404
     assert client.get("/sources/FOLIA-MAJOR-LICENSE.txt").status_code == 200
     assert client.head("/sources/FOLIA-MAJOR-SOURCE.zip").status_code == 200

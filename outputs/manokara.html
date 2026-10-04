@@ -107,6 +107,7 @@ const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&'
 const fmt=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
 const tp=ManokaraCore.timeValue;
 let items=[],ci=null,pos=0,last=-1,mode='',counting=false,cdLeft=0,cdLast=0,cdT,fbPend=null,tick,dur=null,media=null,yt=null,ytOk=false,tok=0,paused=false,acc=0,runAt=null,edit=-1,res=[];
+let mediaLookup=null,mediaStart=0;
 try{const saved=JSON.parse(localStorage.getItem('kpt2')||'[]');if(Array.isArray(saved))items=saved.filter(it=>it&&typeof it==='object'&&(it.mc||typeof it.url==='string')).map(it=>{
  const number=(v,otherwise=0)=>Number.isFinite(Number(v))?Number(v):otherwise;
  return {...it,title:String(it.title||it.url||'').slice(0,512),memo:String(it.memo||'').slice(0,4096),lrc:String(it.lrc||''),s:Math.max(0,number(it.s)),e:it.e==null?null:number(it.e,null),off:number(it.off),dur:it.dur==null?null:number(it.dur,null)};
@@ -145,7 +146,7 @@ function loadYT(){if(window.YT&&YT.Player)return Promise.resolve(true);
 function ovShow(){let o=$('#ov');if(!counting||!ci){if(o)o.remove();return}
  if(!o){o=document.createElement('div');o.id='ov';$('#stage').appendChild(o)}
  o.innerHTML='<b>'+esc(ci.title)+'</b><span>'+Math.max(1,Math.ceil(cdLeft))+'</span><small>Press ▶ Play to start now</small>'}
-function clearAll(){clearInterval(tick);clearInterval(cdT);tok++;timelineVersion++;counting=false;fbPend=null;if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;if(media){try{media.pause()}catch(e){}}media=null;runAt=null;acc=0;
+function clearAll(){clearInterval(tick);clearInterval(cdT);tok++;timelineVersion++;counting=false;fbPend=null;mediaLookup?.abort();mediaLookup=null;if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;if(media){try{media.pause();media.removeAttribute('src');media.load()}catch(e){}}media=null;mediaStart=0;runAt=null;acc=0;
  $('#stage').innerHTML='Waiting to play…';$('#time').textContent='00:00 / 00:00';$('#yt').hidden=true;setPauseUI(false)}
 function endCount(my){if(my!==tok||!counting)return;counting=false;setPauseUI(false);clearInterval(cdT);ovShow();
  if(fbPend){const f=fbPend;fbPend=null;fbFrame(f[0],f[1]);return}
@@ -154,13 +155,34 @@ function fbFrame(id,it){mode='clk';
  if(counting){fbPend=[id,it];return}
  $('#stage').innerHTML='<iframe referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen src="https://www.youtube.com/embed/'+id+'?autoplay=1&start='+Math.floor(it.s||0)+(it.e!=null?'&end='+Math.ceil(it.e):'')+'"></iframe>';
  acc=0;runAt=Date.now();msg('YouTube API could not load: Pause is unavailable and lyric timing is approximate.')}
+function playbackFailure(text,my){if(my!==tok)return;msg(text+' Open it on YouTube to check.');if($('#skip').checked)setTimeout(()=>{if(my===tok)go(nxt())},1500)}
+async function startServerVideo(id,it,my){
+ if(my!==tok||mediaLookup)return;
+ const controller=new AbortController();mediaLookup=controller;
+ msg('Embedded playback is unavailable. Trying server playback…');
+ try{
+  await relayReady;if(my!==tok)return;
+  const r=await window.ManokaraSession.api(relayUrl('/__youtube'),{videoId:id},{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(55000)])});
+  const data=await r.json();if(my!==tok)return;if(!r.ok)throw Error(data.error||'Server playback is unavailable.');
+  if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;
+  const source=new URL(data.url,location.origin);if(source.origin!==location.origin||source.pathname!=='/__youtube/media')throw Error('Invalid video stream.');
+  source.searchParams.set('start',String(it.s||0));
+  const el=document.createElement('video');el.src=source.href;el.controls=true;el.playsInline=true;el.autoplay=!counting&&!paused;el.volume=+$('#vol').value/100;
+  it.mediaDuration=Math.max(0,data.duration-(it.s||0));dur=it.e!=null?it.e-(it.s||0):it.mediaDuration;mediaStart=0;
+  el.onplay=()=>{if(my===tok)setPauseUI(false)};el.onpause=()=>{if(my===tok&&!counting)setPauseUI(true)};el.onseeked=()=>{if(my===tok)timelineVersion++};
+  el.onended=()=>{if(my!==tok)return;if(el.currentTime+3<it.mediaDuration&&(it.e==null||el.currentTime+3<dur))playbackFailure('Server video stream was interrupted.',my);else go(nxt())};
+  el.onerror=()=>playbackFailure('Server video stream could not play. Try again.',my);
+  $('#stage').replaceChildren(el);media=el;mode='media';timelineVersion++;ovShow();msg('Playing video through the server.');
+ }catch(error){if(my===tok&&!controller.signal.aborted)playbackFailure(error.message,my)}
+ finally{if(mediaLookup===controller)mediaLookup=null}
+}
 function startYT(id,it,my){$('#stage').innerHTML='<div id="ytp"></div>';
  loadYT().then(ok=>{if(my!==tok)return;if(!ok){fbFrame(id,it);return}
   const pv={origin:location.origin,autoplay:counting?0:1,start:Math.floor(it.s||0),playsinline:1,rel:0};if(it.e!=null)pv.end=Math.ceil(it.e);
   yt=new YT.Player('ytp',{width:'100%',height:'100%',videoId:id,playerVars:pv,events:{
    onReady:e=>{if(my!==tok)return;ytOk=true;const length=e.target.getDuration();if(length>0)it.mediaDuration=Math.max(0,length-(it.s||0));e.target.setVolume(+$('#vol').value);if(!counting)e.target.playVideo()},
    onStateChange:e=>{if(my!==tok||counting)return;if(e.data===0)go(nxt());else if(e.data===1){takeRelayOwnership();setPauseUI(false)}else if(e.data===2)setPauseUI(true)},
-   onError:e=>{if(my!==tok)return;const code=Number(e?.data);const reason=({2:'Invalid video ID or URL.',5:'YouTube HTML5 player could not play this video.',100:'Video is unavailable, private, or has been removed.',101:'The video owner disabled embedded playback.',150:'The video owner disabled embedded playback.',153:'YouTube did not receive a referrer/client identity. Open Manokara from localhost or HTTPS, not file://.'})[code]||'YouTube could not play this video.';msg(`YouTube error ${code||'unknown'}: ${reason} Open it on YouTube to check.`);if($('#skip').checked)setTimeout(()=>{if(my===tok)go(nxt())},1500)}}})})}
+   onError:e=>{if(my!==tok)return;const code=Number(e?.data);if([5,101,150].includes(code)){startServerVideo(id,it,my);return}const reason=({2:'Invalid video ID or URL.',100:'Video is unavailable, private, or has been removed.',153:'YouTube did not receive a referrer/client identity. Open Manokara from localhost or HTTPS, not file://.'})[code]||'YouTube could not play this video.';playbackFailure(`YouTube error ${code||'unknown'}: ${reason}`,my)}}})})}
 function go(i){takeRelayOwnership();clearAll();pk='';
  if(i<0||i>=items.length){if(ci){const k=idx();last=k>=0?k:pos}if(i>=items.length)last=-1;ci=null;mode='';$('#now').textContent='—';render();updPan();if(i>=items.length)msg('Setlist finished 🎉');return}
  ci=items[i];pos=i;last=i;const it=ci,st=$('#stage'),my=tok;render();msg('');$('#now').textContent=it.mc?'MC':it.title;dur=null;acc=0;runAt=null;
@@ -169,7 +191,7 @@ function go(i){takeRelayOwnership();clearAll();pk='';
  if(it.mc){mode='clk';runAt=Date.now();st.innerHTML='<div><div style="font-size:28px">MC</div>'+esc(it.memo||'')+'</div>';dur=it.dur}
  else{dur=it.e!=null?it.e-(it.s||0):null;
   if(id){mode='yt';$('#yt').href='https://www.youtube.com/watch?v='+id+'&t='+Math.floor(it.s||0);$('#yt').hidden=false;startYT(id,it,my)}
-  else if(isM){mode='media';const el=document.createElement('video');el.src=it.url;el.controls=true;el.autoplay=!counting;el.volume=$('#vol').value/100;
+  else if(isM){mode='media';mediaStart=it.s||0;const el=document.createElement('video');el.src=it.url;el.controls=true;el.autoplay=!counting;el.volume=$('#vol').value/100;
    el.onloadedmetadata=()=>{if(my!==tok)return;it.mediaDuration=Number.isFinite(el.duration)?Math.max(0,el.duration-(it.s||0)):undefined;el.currentTime=it.s||0};el.onseeked=()=>{timelineVersion++};el.onended=()=>go(nxt());el.onplay=()=>setPauseUI(false);el.onpause=()=>{if(!counting)setPauseUI(true)};
    el.onerror=()=>{msg('Could not load this media.');if($('#skip').checked)setTimeout(()=>{if(my===tok)go(nxt())},1500)};st.innerHTML='';st.appendChild(el);media=el}
   else{mode='clk';runAt=Date.now();st.innerHTML='<div>This link cannot be embedded.<br><a style="color:#fff" href="'+esc(it.url)+'" target="_blank" rel="noopener">Open in new tab ↗</a></div>'}}
@@ -179,7 +201,7 @@ function go(i){takeRelayOwnership();clearAll();pk='';
  tick=setInterval(()=>{if(counting)return;const e=elapsed();if(dur!=null&&e>=dur){go(nxt());return}$('#time').textContent=fmt(e)+' / '+(dur!=null?fmt(dur):'--:--')},250);
  updPan()}
 function elapsed(){const it=ci;if(!it||counting)return 0;
- if(mode==='media')return media?media.currentTime-(it.s||0):0;
+ if(mode==='media')return media?media.currentTime-mediaStart:0;
  if(mode==='yt'){if(!yt||!ytOk)return 0;try{return yt.getCurrentTime()-(it.s||0)}catch(e){return 0}}
  return clkEl()}
 function render(){showOff();$('#list').innerHTML=items.map((it,i)=>'<li class="'+(it===ci?'on':'')+'" data-i="'+i+'"><span class="t" data-a="go">'+(i+1)+'. '+(it.mc?'🎙 MC '+esc(it.memo||''):esc(it.title)+(it.lrc?' ⏱':''))+'</span><small>'+(it.mc?(it.dur!=null?fmt(it.dur):''):(it.e!=null?fmt(it.e-(it.s||0)):''))+'</small>'+(it.mc?'':'<button class="s" data-a="ed">✎</button>')+'<button class="s" data-a="up">▲</button><button class="s" data-a="dn">▼</button><button class="s" data-a="del">✕</button></li>').join('')||'<small>No songs yet. Add one below.</small>'}

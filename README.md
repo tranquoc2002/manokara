@@ -6,6 +6,8 @@ Deploy on an Arch Linux VPS using the short [deployment guide](DEPLOY.md): insta
 
 Requires Python 3.12 or newer and an explicit origin. Setlists and preferences stay in the browser; room identities and anonymous browser credentials are stored in `$HOME/.local/state/manokara` by default. Caddy is not required.
 
+The start script enables a yt-dlp/FFmpeg video fallback with Chrome impersonation for YouTube embeds that cannot play. It streams through memory without saving media files; it uses VPS/tunnel bandwidth. See the deployment guide for dependencies, limits and optional server-side Firefox cookies.
+
 Run security regression tests with `python -m pytest tests/test_security.py`. See the deployment guide for local development and the Chromium smoke test.
 
 Shared lyric parsing and timing live in `outputs/manokara-core.js`; all visualizers consume the same timeline. Use `node --test tests/test_core.cjs` for clock/parser regressions and `python tests/browser_smoke.py --all-effects` for the controller and every output mode.

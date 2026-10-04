@@ -1,6 +1,8 @@
 """Playback and output regressions, using a deterministic YouTube API fixture."""
 
 import time
+import shutil
+import subprocess
 
 YOUTUBE_FIXTURE = r"""window.YT = {Player: class {
   constructor(id, options) {
@@ -28,6 +30,54 @@ def add_song(page, title, url="https://example.com/test-song", lyrics="[00:00]Br
     page.locator('#st').fill(start)
     page.locator('#en').fill(end)
     page.locator('#add').click()
+
+
+def exercise_server_fallback(page, obs):
+    executable = shutil.which('ffmpeg')
+    if not executable:
+        print('Video fallback browser fixture skipped: FFmpeg is not installed.')
+        return
+    # Generate an original video/audio fixture in RAM; no provider media is downloaded.
+    fixture = subprocess.run([executable, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24',
+        '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=44100', '-t', '12', '-c:v', 'libx264',
+        '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags',
+        'frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4', 'pipe:1'], capture_output=True, timeout=20)
+    assert fixture.returncode == 0, 'Could not generate video fixture.'
+    lookup = '**/__youtube?*'
+    stream = '**/__youtube/media?*'
+    starts = []
+    page.route(lookup, lambda route: route.fulfill(json={'url':'/__youtube/media?room=test&ticket=fixture', 'duration':12}))
+    def serve(route):
+        starts.append(route.request.url)
+        route.fulfill(content_type='video/mp4', body=fixture.stdout, headers={'Cache-Control':'no-store'})
+    page.route(stream, serve)
+    try:
+        page.locator('#cdn').fill('3')
+        page.locator('#lfx').select_option('clean')
+        add_song(page, 'Server fallback test', 'https://www.youtube.com/watch?v=ju03AIeny2Q', '[00:00]Server fallback lyrics', start='00:03', end='00:08')
+        page.locator('#list li').last.locator('[data-a="go"]').click()
+        page.wait_for_function('() => window.testYT?.options.videoId === "ju03AIeny2Q"')
+        page.evaluate('testYT.options.events.onError({data:150})')
+        page.locator('#stage video').wait_for()
+        page.wait_for_function('() => !counting && media && !media.paused && media.readyState >= 2')
+        obs.wait_for_function('() => ManokaraOutput.getSnapshot()?.playing && document.querySelector("#current").textContent === "Server fallback lyrics"')
+        assert any('start=3' in url for url in starts)
+        page.locator('#pause').click()
+        page.wait_for_function('() => media.paused')
+        before = page.evaluate('elapsed()')
+        page.wait_for_timeout(350)
+        assert abs(page.evaluate('elapsed()') - before) < .05
+        obs.wait_for_function('() => ManokaraOutput.getSnapshot()?.paused')
+        page.locator('#play').click()
+        page.wait_for_function('(before) => elapsed() > before + .2', arg=before)
+        assert page.evaluate('dur') == 5
+        page.locator('#list li').nth(1).locator('[data-a="go"]').click()
+        page.wait_for_function('() => !document.querySelector("#stage video")')
+        obs.wait_for_function('() => document.querySelector("#current").textContent === "Browser smoke test"')
+        print('Server fallback browser checks passed: embed error, video/audio, countdown, start/end range, pause/resume, lyric timing and cleanup.')
+    finally:
+        page.unroute(lookup)
+        page.unroute(stream)
 
 
 def exercise_controller(page, obs, origin):
@@ -140,7 +190,7 @@ def exercise_controller(page, obs, origin):
     page.locator('#lcenter').uncheck()
     page.locator('#skip').uncheck()
     page.evaluate('testYT.options.events.onError({data:150})')
-    assert 'owner disabled' in page.locator('#msg').inner_text()
+    page.wait_for_function('() => document.querySelector("#msg").textContent.includes("Server playback is disabled")')
 
     # MC and stop clear motion without displaying a Ready placeholder over the lyrics.
     page.locator('#mcm').fill('MC regression')

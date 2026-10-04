@@ -10,6 +10,7 @@ From your project folder on the VPS:
 cd "$HOME/manokara"
 python -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
+sudo pacman -S --needed yt-dlp ffmpeg deno python-curl_cffi
 ```
 
 Use Python 3.12 or newer. The app is public and requires no password or account.
@@ -20,6 +21,8 @@ The hostname in `start-manokara.sh` is already set to `https://mano.del4yowo.id.
 #!/bin/sh
 export MANOKARA_ORIGIN="https://mano.del4yowo.id.vn"
 export MANOKARA_DATA_DIR="$HOME/.local/state/manokara"
+export MANOKARA_YTDLP_ENABLED=1
+export MANOKARA_YTDLP_IMPERSONATE=chrome
 
 umask 077
 exec "$HOME/manokara/.venv/bin/python" "$HOME/manokara/outputs/manokara_server.py"
@@ -64,6 +67,27 @@ Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocke
 
 ## Runtime behavior
 
+### YouTube videos that cannot be embedded
+
+The normal YouTube player is tried first. On embedded-player errors 5, 101 or 150, the app tries server playback using yt-dlp and FFmpeg. The supplied start script enables this with `MANOKARA_YTDLP_ENABLED=1` and uses Chrome impersonation with `MANOKARA_YTDLP_IMPERSONATE=chrome`. Both tools and Deno must be in the server account's PATH; install compatible yt-dlp-ejs if your yt-dlp package requires it. You can use Node instead by setting `MANOKARA_YTDLP_JS_RUNTIME=node`. Unset the enabled variable to run with embedded playback only.
+
+Video and audio streams are resolved just before playback and remuxed into fragmented MP4 through stdout. Media and signed URLs are never saved to disk or SQLite. Streaming still transfers media bytes: the VPS receives the video and relays it through your tunnel, consuming its bandwidth. The fallback supports public/unlisted, unrestricted recorded videos up to two hours, selects H.264/AAC up to 720p, and bounds lookups to four, active video streams to eight globally/two per browser, and each transfer to 256 MiB. OBS remains a separate read-only lyric output. Other browsers and OBS links cannot use your video relay.
+
+The fallback supports the app's pause, countdown and Start/End controls. Start cuts can align near video keyframes; use live lyric sync if needed. Arbitrary seeking to unbuffered portions is unavailable with this pipe stream. Cookies and yt-dlp do not change the uploader's embedding permission or guarantee that YouTube will supply playable streams.
+
+Chrome impersonation requires yt-dlp's curl-cffi support, provided by Arch's [python-curl_cffi package](https://archlinux.org/packages/extra/x86_64/python-curl_cffi/). Check `yt-dlp --list-impersonate-targets` if needed. Unset `MANOKARA_YTDLP_IMPERSONATE` to disable impersonation. It applies to yt-dlp's requests; FFmpeg uses its own transport for media.
+
+Firefox cookies are optional and disabled by default. To use a dedicated Firefox profile belonging to the server account, add these lines to your private start script:
+
+```sh
+export MANOKARA_YTDLP_FIREFOX_COOKIES=1
+export MANOKARA_YTDLP_FIREFOX_PROFILE="$HOME/.mozilla/firefox/your-profile"
+```
+
+The profile variable can be omitted to use yt-dlp's default Firefox profile. Cookies are read only by server subprocesses; there is no cookie upload form or browser-visible cookie data. Use a separate profile/account: a public relay shares its request volume, and stale/account-specific cookies can make videos fail that work without cookies. Private, members-only, age-restricted, live and DRM content remains rejected. An unavailable video shows an error and respects Skip errors.
+
+### Rooms and OBS
+
 Each browser profile receives an automatic Secure, HttpOnly control cookie. It can control only the rooms it created; visiting someone else's controller URL opens your own room instead. Cookies must be enabled. Tabs in the same profile reuse its room; clicking a controller tab takes control of that room. Separate profiles, private windows, or devices receive separate rooms.
 
 Different users can use OBS simultaneously with different songs. Each user copies their own OBS link from the app. Multiple OBS instances using the same link show the same room. Sharing an OBS link shares viewing access only; it never shares control.
@@ -84,9 +108,8 @@ Stop the server, update the project and install its requirements, then run your 
 
 ```sh
 .venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest tests/test_security.py
-.venv/bin/python -m pytest tests/test_relay_stream.py
-node --test tests/test_core.cjs
+.venv/bin/python -m pytest tests -q
+node --test tests/test_core.cjs tests/test_output_relay.cjs
 ```
 
 For real-browser tests:
@@ -99,7 +122,7 @@ For real-browser tests:
 
 These tests start/stop their own temporary local server. Set `MANOKARA_TEST_BROWSER` to an installed Chromium/Edge executable if preferred. Browser playback cases use a deterministic YouTube API fixture; they do not establish that any particular public video permits embedding.
 
-Node is used for shared-clock unit tests and optional Romaji asset rebuilds; production only runs Python. External font/media providers still need to be reachable for their functionality.
+Node is used for shared-clock unit tests and optional Romaji asset rebuilds, and can replace Deno for yt-dlp. The web server runs Python. External font/media providers still need to be reachable for their functionality.
 
 For local HTTP development only, set `MANOKARA_ORIGIN=http://localhost:8000` and `MANOKARA_ALLOW_HTTP=1`, then invoke the Python entry point directly. Local HTTP is restricted to loopback hostnames. On Windows use `.venv\Scripts\python.exe` and PowerShell `$env:MANOKARA_*` assignments.
 

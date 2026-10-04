@@ -21,8 +21,10 @@ from urllib.parse import urlsplit
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from starlette.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from starlette.routing import Route
+
+from manokara_media import MediaResponse, MediaService, MediaSettings
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 262_144
@@ -346,6 +348,7 @@ class SecurityHeaders:
 def create_app(settings=None):
     settings = settings or Settings.from_env()
     store, limiter = Store(settings), Limiter()
+    media_service = MediaService(MediaSettings.from_env())
     manifest = asset_manifest()
 
     def browser_session(request):
@@ -506,6 +509,46 @@ def create_app(settings=None):
     async def health(request):
         return JSONResponse({"ok": True})
 
+    async def youtube_lookup(request):
+        digest = browser_session(request)
+        room_id = request.query_params.get("room")
+        store.room(room_id, digest)
+        limiter.check(("youtube", digest), 2 / 60, 4)
+        limiter.check("youtube-global", 1, 8)
+        payload = await read_json(request, 1024)
+        if set(payload) != {"videoId"}:
+            raise HTTPException(400, "Send only a YouTube video ID.")
+        result = await media_service.resolve(payload["videoId"], room_id, digest)
+        store.room(room_id, digest)
+        result["url"] = f"/__youtube/media?room={room_id}&ticket={result.pop('ticket')}"
+        return JSONResponse(result)
+
+    async def youtube_media(request):
+        digest = browser_session(request)
+        room_id = request.query_params.get("room")
+        store.room(room_id, digest)
+        ticket = request.query_params.get("ticket", "")
+        if not ROOM_ID.fullmatch(ticket):
+            raise HTTPException(404, "Video stream not found.")
+        if request.method == "HEAD":
+            media_service.get_ticket(ticket, room_id, digest)
+            return Response(media_type="video/mp4", headers={"Accept-Ranges": "none"})
+        limiter.check(("media", digest), 1, 6)
+        try:
+            start = float(request.query_params.get("start", "0"))
+        except ValueError:
+            raise HTTPException(400, "Invalid video start time.")
+        process, initial = await media_service.open(ticket, room_id, digest, start)
+
+        def valid():
+            try:
+                store.room(room_id, digest)
+                return store.session(request.cookies.get(settings.cookie)) == digest
+            except HTTPException:
+                return False
+
+        return MediaResponse(media_service, process, initial, digest, valid)
+
     async def assets(request):
         path = request.url.path
         room = request.query_params.get("room", "")
@@ -523,8 +566,11 @@ def create_app(settings=None):
 
     @asynccontextmanager
     async def lifespan(app):
-        yield
-        store.db.close()
+        try:
+            yield
+        finally:
+            await media_service.close()
+            store.db.close()
 
     app = Starlette(routes=[
         Route("/__session", open_session, methods=["POST"]),
@@ -532,9 +578,12 @@ def create_app(settings=None):
         Route("/__room/delete", room_change, methods=["POST"]),
         Route("/__lyric-owner", relay_owner, methods=["POST"]),
         Route("/__lyric-state", relay_state, methods=["GET", "POST"]),
+        Route("/__youtube", youtube_lookup, methods=["POST"]),
+        Route("/__youtube/media", youtube_media, methods=["GET", "HEAD"]),
         Route("/healthz", health, methods=["GET"]), Route("/{path:path}", assets, methods=["GET", "HEAD"]),
     ], exception_handlers={HTTPException: http_error}, lifespan=lifespan)
     app.state.store, app.state.limiter, app.state.settings = store, limiter, settings
+    app.state.media = media_service
     app.add_middleware(SecurityHeaders, settings=settings, manifest=manifest)
     return app
 
