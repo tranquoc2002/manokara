@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from starlette.routing import Route
 
 ROOT = Path(__file__).resolve().parent
@@ -222,7 +222,9 @@ def snapshot(payload):
                "effect": 32, "centerShape": 8, "colorTheme": 12}
     numbers = {"time": (-86400, 604800), "sampledAt": (0, 100_000_000_000_000),
                "countdownRemaining": (0, 60), "duration": (0, 604800), "size": (24, 160),
-               "themeSeed": (0, 4_294_967_295), "timelineVersion": (0, 100_000_000_000_000)}
+               "themeSeed": (0, 4_294_967_295), "timelineVersion": (0, 100_000_000_000_000),
+               "uploadDelayMs": (0, 2000),
+               **{name: (0, 1) for name in ("audioPower", "audioBass", "audioLowMid", "audioMid", "audioVocal", "audioTreble")}}
     booleans = set("ready playing paused counting mc transparent bold centerFree".split())
     if set(payload) - (strings.keys() | numbers.keys() | booleans):
         raise HTTPException(400, "Unknown lyric state field.")
@@ -253,7 +255,8 @@ def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
              "manokara-session.js", "manokara-core.js",
-             "manokara-lyrics.js", "manokara-lyrics-editor.js", "manokara-romaji-worker.js"]
+             "manokara-lyrics.js", "manokara-lyrics-editor.js", "manokara-romaji-worker.js",
+             "manokara-relay.js", "manokara-audio.js"]
     result = {"/" + name: ROOT / name for name in names}
     # Only the converter, dictionary blobs and notices are served from this directory.
     for file in (ROOT / "romaji-assets").rglob("*"):
@@ -392,14 +395,57 @@ def create_app(settings=None):
         if request.url.path == "/__room/rotate":
             store.db.execute("UPDATE rooms SET epoch=epoch+1 WHERE id=?", (room_id,))
             store.db.commit()
+            if room_id in store.live:
+                store.live[room_id]["changed"].set()
             return JSONResponse({"room": room_id, "viewToken": store.view_token(room_id)})
         store.db.execute("DELETE FROM rooms WHERE id=?", (room_id,))
         store.db.commit()
-        store.live.pop(room_id, None)
+        old_room = store.live.pop(room_id, None)
+        if old_room:
+            old_room["changed"].set()
         return JSONResponse({"ok": True})
 
+    active_streams = {}
+
     def live_room(room_id):
-        return store.live.setdefault(room_id, {"owner": None, "until": 0, "snapshot": {"ready": False}})
+        return store.live.setdefault(room_id, {"owner": None, "until": 0, "snapshot": {"ready": False},
+                                               "revision": 0, "changed": asyncio.Event()})
+
+    def live_snapshot(room):
+        result = dict(room["snapshot"])
+        if "received_at" in room:
+            result["stateAgeMs"] = max(0, (time.monotonic() - room["received_at"]) * 1000) + result.pop("uploadDelayMs", 0)
+        return result
+
+    async def stream_state(room_id, cookie, authorization):
+        # One latest scene per client, no playback backlog; recheck revocation on every update/heartbeat.
+        previous = None
+        revision = -1
+        try:
+            while True:
+                try:
+                    store.room(room_id)
+                    valid = store.owns_room(room_id, store.session(cookie)) or store.viewer(room_id, authorization)
+                except HTTPException:
+                    valid = False
+                if not valid:
+                    yield 'event: revoked\ndata: {}\n\n'
+                    return
+                room = live_room(room_id)
+                changed = room["changed"]
+                if revision != room["revision"]:
+                    scene = live_snapshot(room)
+                    packet = {"state": scene} if previous is None or previous.keys() - scene.keys() else {"patch": {k:v for k,v in scene.items() if previous.get(k) != v}}
+                    previous, revision = scene, room["revision"]
+                    yield 'data: ' + json.dumps(packet, ensure_ascii=False, separators=(',', ':')) + '\n\n'
+                try:
+                    await asyncio.wait_for(changed.wait(), timeout=5)
+                except TimeoutError:
+                    yield ': heartbeat\n\n'
+        finally:
+            active_streams[room_id] -= 1
+            if not active_streams[room_id]:
+                del active_streams[room_id]
 
     async def relay_owner(request):
         digest = browser_session(request)
@@ -426,25 +472,35 @@ def create_app(settings=None):
                 raise HTTPException(401, "Use this room's controller browser or a valid OBS link.")
             limiter.check(("read", room_id), 40, 100)
             room = live_room(room_id)
-            result = dict(room["snapshot"])
-            if "received_at" in room:
-                # Age comes from this process's monotonic clock, not either device's wall clock.
-                result["stateAgeMs"] = max(0, (time.monotonic() - room["received_at"]) * 1000)
-            return JSONResponse(result)
+            if request.query_params.get("stream") == "1" and request.method == "GET":
+                if active_streams.get(room_id, 0) >= 8 or sum(active_streams.values()) >= 128:
+                    raise HTTPException(429, "Too many live lyric viewers.")
+                active_streams[room_id] = active_streams.get(room_id, 0) + 1
+                return StreamingResponse(stream_state(room_id, request.cookies.get(settings.cookie), request.headers.get("authorization", "")),
+                    media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
+            return JSONResponse(live_snapshot(room))
         digest = browser_session(request)
         limiter.check(("write", digest), 10, 30)
         store.room(room_id, digest)
         payload = snapshot(await read_json(request))
         room = live_room(room_id)
+        partial = request.query_params.get("patch") == "1"
+        if partial and (room["owner"] is None or room["until"] <= time.monotonic() or not room["snapshot"].get("ready")):
+            raise HTTPException(428, "Send a complete lyric scene after restart or lease expiry.")
         # This room's controller can recover automatically after restart/lease expiry.
         # No await occurs between checking ownership and updating the room.
         if room["owner"] is None or room["until"] <= time.monotonic():
             room["owner"] = payload["writerId"]
         if room["owner"] != payload["writerId"]:
             raise HTTPException(409, "Another window controls this room. Click the app to take control.")
+        if partial:
+            payload = snapshot({**room["snapshot"], **payload})
         room["until"] = time.monotonic() + WRITER_SECONDS
         room["snapshot"] = {key: value for key, value in payload.items() if key != "writerId"}
         room["received_at"] = time.monotonic()
+        room["revision"] += 1
+        room["changed"].set()
+        room["changed"] = asyncio.Event()
         return JSONResponse({"ok": True})
 
     async def health(request):

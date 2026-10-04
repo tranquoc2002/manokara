@@ -5,50 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manokara · Folia visualizers</title>
     <link rel="icon" href="./manokara.ico">
-    <script src="./manokara-core.js"></script>
-    <script>
-      (() => {
-        const room=new URL(location.href).searchParams.get('room')||'';
-        try{if(parent!==window&&parent.ManokaraOutput?.room===room){window.ManokaraFoliaSource=parent.ManokaraOutput;return}}catch(_){}
-        const clock=ManokaraCore.createClock(),listeners=new Set();
-        const token=new URLSearchParams(location.hash.slice(1)).get('view')||'';
-        let state={ready:false},pending=false;
-        window.ManokaraFoliaSource={time:()=>clock.time(),getSnapshot:()=>state,subscribe(fn){listeners.add(fn);fn(state);return()=>listeners.delete(fn)}};
-        async function poll(){
-          if(pending)return;pending=true;
-          try{
-            const response=await fetch('/__lyric-state?room='+encodeURIComponent(room),{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(4000),headers:token?{Authorization:'Bearer '+token}:{}});
-            if(response.ok){const next=await response.json();state=next.ready===false?next:clock.accept(next)}
-            else if(response.status===401||response.status===404)state={ready:false};
-            else return;
-            for(const fn of listeners)fn(state);
-          }catch(_){}finally{pending=false}
-        }
-        poll();setInterval(poll,200);
-      })();
-    </script>
-    <script type="module" crossorigin src="./folia-assets/manokara-folia-OVwHZETO.js"></script>
+    <script type="module" crossorigin src="./folia-assets/manokara-folia-DqViiC_-.js"></script>
     <link rel="modulepreload" crossorigin href="./folia-assets/rolldown-runtime-hePW80VL.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/x-BV_1GJnz.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/react-dom-CMrkT_EO.js">
-    <link rel="modulepreload" crossorigin href="./folia-assets/appPlaybackHelpers-DWjIMh62.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/appPlaybackHelpers-DPSi06f1.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/urlBackground-DEWo95SM.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/preload-helper-uBIymjUX.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/colorMix-BxoitSzb.js">
-    <link rel="modulepreload" crossorigin href="./folia-assets/dioramaMoteField-XTZp_Kf0.js">
-    <link rel="modulepreload" crossorigin href="./folia-assets/temperaLayerImages-f1Lo5I3z.js">
-    <link rel="modulepreload" crossorigin href="./folia-assets/useStatusMessageStore-cqmaGYEO.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/dioramaMoteField-DA9m7_UD.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/temperaLayerImages-DBdUUjwC.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/useStatusMessageStore-Ct8lQLtR.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/temperaRandom-Cj3v-sKs.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/temperaImageLayer-ChlJMzuD.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/alternateText-BieoZVFZ.js">
-    <link rel="modulepreload" crossorigin href="./folia-assets/harmonyRuntime-gDq3J6Ws.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/harmonyRuntime-DPeLTOXm.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/fontStacks-BnJBkWk9.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/graphemeTiming-BhIjEJVM.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/layout-B9QX0GDF.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/rich-inline-CSl-nZmG.js">
     <link rel="modulepreload" crossorigin href="./folia-assets/subtitleTrackStyle-B8nybXX5.js">
-    <link rel="stylesheet" crossorigin href="./folia-assets/manokara-folia-DhiUZ-x_.css">
+    <link rel="stylesheet" crossorigin href="./folia-assets/manokara-folia-BUlOtlbM.css">
   </head>
   <body>
     <div id="root"></div>
+    <script src="./manokara-core.js"></script>
+<script src="./manokara-relay.js"></script>
+<script>
+      (() => {
+        const room=new URL(location.href).searchParams.get('room')||'';
+        try{if(parent!==window&&parent.ManokaraOutput?.room===room){window.ManokaraFoliaSource=parent.ManokaraOutput;return}}catch(_){}
+        const clock=ManokaraCore.createClock(),listeners=new Set();
+        const token=new URLSearchParams(location.hash.slice(1)).get('view')||'';
+        let state={ready:false};
+        window.ManokaraFoliaSource={time:()=>clock.time(),getSnapshot:()=>state,audio:()=>state.playing&&!state.paused&&clock.age()<1000?state:null,subscribe(fn){listeners.add(fn);fn(state);return()=>listeners.delete(fn)}};
+        const notify=()=>{for(const fn of listeners)fn(state)};
+        ManokaraRelay.connect({url:'/__lyric-state?room='+encodeURIComponent(room),token,
+          receive(next,delay){state=next.ready===false?next:clock.accept(next,performance.now(),delay);notify()},
+          revoked(){state={ready:false};notify()}});
+      })();
+    </script>
+
   </body>
 </html>

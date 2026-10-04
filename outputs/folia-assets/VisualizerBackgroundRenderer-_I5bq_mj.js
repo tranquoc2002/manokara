@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import"./urlBackground-DEWo95SM.js";import{E as t}from"./manokara-folia-DqViiC_-.js";var n=e({default:()=>r}),r=e=>{if(e.config?.transparent)return null;let n=e.config?.mode??`latent`;return t(n).render(e)};export{n,r as t};

@@ -6,7 +6,7 @@ import './index.css';
 import './manokara-folia.css';
 import ObsWebSourceApp from './components/obs/ObsWebSourceApp';
 import type { ObsWebAppearance } from './utils/obsWebAppearance';
-import type { Line, LyricData, Theme } from './types';
+import type { LyricData, Theme } from './types';
 import type { WebLyricSource, WebLyricSourceState } from './types/webLyricSource';
 
 // The upstream visualizer's Pixi runtime expects the browser Buffer polyfill.
@@ -16,6 +16,7 @@ type ManokaraSnapshot = {
   ready?: boolean; title?: string; lrc?: string; time?: number; sampledAt?: number;
   playing?: boolean; paused?: boolean; counting?: boolean; mc?: boolean; duration?: number; size?: number;
   foreground?: string; font?: string; bold?: boolean; effect?: string;
+  audioPower?: number; audioBass?: number; audioLowMid?: number; audioMid?: number; audioVocal?: number; audioTreble?: number;
 };
 
 const VALID_MODES = new Set([
@@ -26,26 +27,17 @@ const VALID_MODES = new Set([
 type SharedSource = {
   time: () => number; getSnapshot: () => ManokaraSnapshot | null;
   subscribe: (fn: (snapshot: ManokaraSnapshot) => void) => () => void;
+  audio?: () => ManokaraSnapshot | null;
 };
 const shared = (window as unknown as { ManokaraFoliaSource: SharedSource }).ManokaraFoliaSource;
-const core = (window as unknown as { ManokaraCore: { parseLyrics: (raw: string, duration: number) => {lines: {t: number; x: string}[]} } }).ManokaraCore;
+const core = (window as unknown as { ManokaraCore: { foliaLyrics: (raw: string, duration: number) => LyricData } }).ManokaraCore;
 
 function parseLrc(raw: string, fallbackDuration: number): LyricData {
-  const parsed = core.parseLyrics(raw, fallbackDuration).lines;
-  const duration = Math.max(1, fallbackDuration || 180);
-  const lines: Line[] = parsed.map((line, index) => {
-    const startTime = Math.max(0, line.t);
-    const endTime = Math.max(startTime + 0.01, parsed[index + 1]?.t ?? duration);
-    const tokens = line.x.match(/\s+|[^\s]+/gu) || [];
-    const wordSpan = (endTime - startTime) / Math.max(1, tokens.length);
-    const words = tokens.map((text, wordIndex) => ({
-      text, startTime: startTime + wordIndex * wordSpan,
-      endTime: wordIndex === tokens.length - 1 ? endTime : startTime + (wordIndex + 1) * wordSpan,
-    }));
-    return { id: `manokara-${index}`, fullText: line.x, startTime, endTime, words };
-  });
-  return { lines, isWordByWord: false };
+  return core.foliaLyrics(raw, fallbackDuration);
 }
+
+const readAudioSnapshot = () => shared.audio?.() || null;
+const modeLoaders = import.meta.glob('./components/visualizer/*/Visualizer*.tsx');
 
 const emptyState: WebLyricSourceState = {
   connectionStatus: 'connecting', playerState: 'idle', track: null, lyrics: null,
@@ -63,6 +55,11 @@ function FoliaBridge() {
 
   const modeCandidate = String(new URL(location.href).searchParams.get('mode') || snapshot?.effect || '').replace(/^folia-/, '');
   const mode = VALID_MODES.has(modeCandidate) ? modeCandidate : 'classic';
+  useEffect(() => {
+    const loader = Object.entries(modeLoaders).find(([path]) => path.startsWith(`./components/visualizer/${mode}/`))?.[1];
+    // Fetch only the selected renderer while idle/counting, before the first lyric needs it.
+    if (loader) void loader().catch(() => {});
+  }, [mode]);
   const lines = useMemo(() => parseLrc(snapshot?.lrc || '', Number(snapshot?.duration) || 180), [snapshot?.lrc, snapshot?.duration]);
   const theme = useMemo<Theme>(() => {
     const font = String(snapshot?.font || 'system-ui, sans-serif').split(',')[0].replace(/["']/g, '').trim();
@@ -105,8 +102,8 @@ function FoliaBridge() {
     subtitleUpcomingLyricsBlur: true, hideTranslationSubtitle: true,
   }), [mode, theme, snapshot?.size]);
 
-  if (!snapshot?.ready || !snapshot.title || !snapshot.lrc || snapshot.counting || snapshot.mc) return null;
-  return <ObsWebSourceApp source={source} appearance={appearance} />;
+  if (!snapshot?.ready || !snapshot.title || !snapshot.lrc || snapshot.mc) return null;
+  return <ObsWebSourceApp source={source} appearance={appearance} getAudioSnapshot={readAudioSnapshot} />;
 }
 
 createRoot(document.getElementById('root')!).render(<FoliaBridge />);

@@ -30,7 +30,40 @@ test('output clock ignores device wall-clock skew and smooths small sample jitte
   clock.accept(snap({stateAgeMs:200}), 0);
   assert.equal(clock.time(300), 10.5);
   clock.accept(snap({time:10.2,stateAgeMs:50}), 300);
-  assert.equal(clock.time(600), 10.8);
+  assert.equal(clock.time(300), 10.5);
+  assert.ok(clock.time(600) > 10.75 && clock.time(600) < 10.8);
+});
+
+test('clock compensates both transit legs without depending on device wall clocks', () => {
+  const clock = createClock();
+  clock.accept(snap({time:11.8,stateAgeMs:100,sampledAt:999999999}), 1000, 100);
+  assert.equal(clock.time(1000), 12);
+  assert.equal(clock.time(1250), 12.25);
+  const latency = ManokaraCore.createLatencyEstimator();
+  for (const sample of [200,220,180,1600,210]) latency.record(sample);
+  assert.equal(latency.oneWay(), 90);
+});
+
+test('small clock errors converge without backward frame jumps or permanent deadband drift', () => {
+  const clock = createClock();
+  clock.accept(snap({time:0}), 0);
+  let previous = 0;
+  for (let ms=10;ms<=10000;ms+=10) {
+    if (ms % 200 === 0) clock.accept(snap({time:ms/1000+.25}), ms);
+    const value = clock.time(ms);
+    assert.ok(value >= previous, `Clock ran backwards at ${ms}`);
+    previous = value;
+  }
+  assert.ok(Math.abs(clock.time(10000)-10.25) < .002);
+});
+
+test('Folia retains Enhanced LRC word timestamps, offsets and repeated line stamps', () => {
+  const lyrics = ManokaraCore.foliaLyrics('[offset:-200]\n[00:01][00:04]<00:01>君<00:01.50>の声<00:02.50>\n[00:06]', 10);
+  assert.equal(lyrics.isWordByWord, true);
+  assert.deepEqual(lyrics.lines[0].words, [{text:'君',startTime:.8,endTime:1.3},{text:'の声',startTime:1.3,endTime:2.3}]);
+  assert.deepEqual(lyrics.lines[1].words.map(w=>w.startTime), [3.8,4.3]);
+  assert.equal(lyrics.lines[2].fullText, '');
+  assert.equal(ManokaraCore.foliaLyrics('[00:01]One two\n[00:03]Next').isWordByWord, false);
 });
 
 test('seeks, offset changes and pause are authoritative', () => {

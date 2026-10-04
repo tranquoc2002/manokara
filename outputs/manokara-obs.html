@@ -36,6 +36,7 @@ body[data-center-free="on"][data-center-shape="tall"] #romajiCaption[data-zone="
 </head>
 <body><main id="out"><div id="previous"></div><div id="current"></div><div id="count"></div></main><canvas id="jizuraCanvas"></canvas><iframe id="foliaFrame" title="Folia lyric visualizer" allow="autoplay"></iframe><div id="romajiCaption" hidden></div>
 <script src="./manokara-core.js"></script>
+<script src="./manokara-relay.js"></script>
 <script src="./manokara-effects.js?v=2"></script>
 <script src="./manokara-jizura.js?v=full"></script>
 <script src="./manokara-jizura-adapter.js?v=random-style-1"></script>
@@ -49,8 +50,8 @@ const relayViewToken=new URLSearchParams(location.hash.slice(1)).get('view')||''
 window.addEventListener('hashchange',()=>location.reload());
 const relayStateUrl=()=>{const url=new URL('/__lyric-state',location.href);if(relayRoom)url.searchParams.set('room',relayRoom);return url.href};
 const clock=ManokaraCore.createClock(),subscribers=new Set();
-let state=null,parsedKey='',lines=[],secondaryLines=[],lastTextKey='',pollPending=false,captionKey='';
-window.ManokaraOutput={room:relayRoom,time:()=>clock.time(),getSnapshot:()=>state,subscribe(fn){subscribers.add(fn);if(state)fn(state);return()=>subscribers.delete(fn)}};
+let state=null,parsedKey='',lines=[],secondaryLines=[],lastTextKey='',captionKey='',sceneKey='',foliaLayoutKey='',directAt=-Infinity,viewerRevoked=false;
+window.ManokaraOutput={room:relayRoom,time:()=>clock.time(),getSnapshot:()=>state,audio:()=>state?.playing&&!state.paused&&clock.age()<1000?state:null,subscribe(fn){subscribers.add(fn);if(state)fn(state);return()=>subscribers.delete(fn)}};
 function notify(){for(const fn of subscribers)fn(state)}
 function googleFontHref(value){
  const [family,...parts]=String(value||'').split(':');
@@ -71,15 +72,15 @@ function lineState(s){
  const key=(s.lrc||'')+'|'+(s.romajiLrc||'')+'|'+s.duration;
  if(key!==parsedKey){parsedKey=key;lines=parseLyrics(s.lrc,s.duration);secondaryLines=s.romajiLrc?parseLyrics(s.romajiLrc,s.duration):[]}
  const t=clock.time();
- let i=-1;for(let j=0;j<lines.length&&lines[j].t<=t;j++)i=j;
+ let low=0,high=lines.length;while(low<high){const mid=(low+high)>>>1;if(lines[mid].t<=t)low=mid+1;else high=mid}const i=low-1;
  return{current:i>=0?lines[i].x:'',previous:i>0?lines[i-1].x:'',romaji:i>=0?secondaryLines[i]?.x||'':'',index:Math.max(0,i)}
 }
 function zoneFor(i,shape){return shape==='tall'?(i%2?'bottom':'top'):(i%2?'right':'left')}
 function syncRomajiCaption(s,ls,shape,zone){
  const node=$('#romajiCaption'),text=ls.current&&ls.romaji!==ls.current?ls.romaji:'';
- node.hidden=!text;node.dataset.zone=zone;
- if(!text){captionKey='';return}
+ if(!text){if(captionKey){node.hidden=true;captionKey=''}return}
  const key=[text,ls.index,s.size,s.centerFree,shape,innerWidth,innerHeight].join('|');if(key===captionKey)return;captionKey=key;
+ node.hidden=false;node.dataset.zone=zone;
  const width=s.centerFree&&shape==='wide'?innerWidth*.32:innerWidth*.88,height=s.centerFree&&shape==='tall'?innerHeight*.065:innerHeight*.14;
  const font=Math.max(9,Math.min((Number(s.size)||64)*.48,48,Math.sqrt(width*height/(Math.max(1,[...text].length)*.8))));
  node.style.fontSize=font.toFixed(2)+'px';
@@ -120,25 +121,28 @@ function syncFoliaCenter(s,shape,zone){
  const fit=Math.max(8,Math.min((Number(s.size)||64)*.625,56,Math.sqrt(safeW*safeH/(units*1.4))));
  try{const d=foliaFrame.contentDocument;if(!d)return;syncFont(s,d);const root=d.documentElement;const px=fit.toFixed(2)+'px';if(root.style.getPropertyValue('--mk-zone-font')!==px)root.style.setProperty('--mk-zone-font',px);const values={mkCenterFree:s.centerFree&&!s.counting&&!s.mc&&!!s.lrc?'on':'off',mkShape:shape,mkZone:zone,mkEffect:String(s.effect||'').replace(/^folia-/,'')};for(const [k,v] of Object.entries(values))if(root.dataset[k]!==v)root.dataset[k]=v;let st=d.getElementById('manokara-center-free-style');if(!st){st=d.createElement('style');st.id='manokara-center-free-style';d.head.appendChild(st)}const color=s.background||'#00ff00';const bgRule=s.transparent!==false?'html,body,#root,#root>div{background-color:transparent!important}':`html,body,#root,#root>div{background-color:${color}!important}`;const css=foliaCenterCSS+bgRule;if(st.textContent!==css)st.textContent=css}catch(e){}
 }
-foliaFrame.addEventListener('load',()=>{if(state)syncFoliaCenter(state,centerShape(state),zoneFor(lineState(state).index,centerShape(state)))});
+foliaFrame.addEventListener('load',()=>{foliaLayoutKey='';if(state)render()});
 const parseLyrics=(raw,duration)=>ManokaraCore.parseLyrics(raw,duration).lines;
 function render(){
  const s=state;
  if(!s){return}
  const effect=String(s.effect||'clean'),body=document.body;
  const shape=centerShape(s),ls=lineState(s),activeZone=zoneFor(ls.index,shape),centerOn=s.centerFree&&!s.counting&&!s.mc&&!!s.lrc;
+ const nextSceneKey=[effect,shape,centerOn,s.colorTheme,s.transparent,s.background,s.foreground,s.font,s.bold,s.size,s.googleFont].join('|');
+ if(nextSceneKey!==sceneKey){sceneKey=nextSceneKey;
  body.dataset.centerFree=centerOn?'on':'off';body.dataset.centerShape=shape;
- $('#current').dataset.zone=activeZone;$('#previous').dataset.zone=zoneFor(ls.index-1,shape);
  const theme=themes[s.colorTheme];body.style.background=s.transparent===false?(s.background||'#00ff00'):'transparent';body.style.color=theme?.color||s.foreground||'#ffffff';foliaFrame.style.background=s.transparent===false?(s.background||'#00ff00'):'transparent';foliaFrame.style.filter=theme?.filter||'none';
  body.style.fontFamily=s.font||'system-ui,"Yu Gothic",sans-serif';body.style.fontWeight=s.bold===false?400:800;
  body.style.fontSize=Math.max(24,Math.min(160,Number(s.size)||64))+'px';
  syncFont(s);
+ }
+ if($('#current').dataset.zone!==activeZone){$('#current').dataset.zone=activeZone;$('#previous').dataset.zone=zoneFor(ls.index-1,shape)}
  syncRomajiCaption(s,ls,shape,activeZone);
+ if(effect.startsWith('folia-')&&foliaFrame.dataset.mode!==effect){foliaFrame.dataset.mode=effect;foliaFrame.src='./manokara-folia.html?mode='+encodeURIComponent(effect)+(relayRoom?'&room='+encodeURIComponent(relayRoom):'')+(relayViewToken?'#view='+encodeURIComponent(relayViewToken):'');foliaLayoutKey=''}
  const foliaMode=effect.startsWith('folia-')&&!s.counting&&!s.mc&&!!s.title&&!!s.lrc;
  if(foliaMode){
   body.dataset.folia='on';jizuraCanvas.style.display='none';body.dataset.jizura='off';
-  if(foliaFrame.dataset.mode!==effect){foliaFrame.dataset.mode=effect;foliaFrame.src='./manokara-folia.html?mode='+encodeURIComponent(effect)+(relayRoom?'&room='+encodeURIComponent(relayRoom):'')+(relayViewToken?'#view='+encodeURIComponent(relayViewToken):'')}
-  syncFoliaCenter(s,shape,activeZone);
+  const layoutKey=[sceneKey,ls.current,activeZone,innerWidth,innerHeight].join('|');if(layoutKey!==foliaLayoutKey){foliaLayoutKey=layoutKey;syncFoliaCenter(s,shape,activeZone)}
   return;
  }
  body.dataset.folia='off';
@@ -161,21 +165,17 @@ function render(){
  if(textKey!==lastTextKey){currentNode.textContent=shown;window.ManokaraLyricFX.play(currentNode,shown,effect);lastTextKey=textKey}
 }
 function clearOutput(message=''){
- state=null;lastTextKey='';captionKey='';$('#romajiCaption').hidden=true;$('#romajiCaption').textContent='';document.body.dataset.centerFree='off';$('#current').className='';$('#current').textContent=message;
+ state=null;lastTextKey='';sceneKey='';foliaLayoutKey='';captionKey='';$('#romajiCaption').hidden=true;$('#romajiCaption').textContent='';document.body.dataset.centerFree='off';$('#current').className='';$('#current').textContent=message;
  $('#previous').textContent='';$('#count').textContent='';document.body.dataset.folia='off';document.body.dataset.jizura='off';jizuraCanvas.style.display='none';
  for(const fn of subscribers)fn({ready:false});
 }
-async function poll(){
- if(pollPending)return;pollPending=true;
- try{
-  const r=await fetch(relayStateUrl(),{cache:'no-store',signal:AbortSignal.timeout(4000),headers:relayViewToken?{Authorization:'Bearer '+relayViewToken}:{},credentials:'omit'});
-  if(r.status===401||r.status===404){clearOutput('OBS link expired or revoked. Copy a new link from Manokara.');return}
-  if(r.ok){const next=await r.json();if(next&&next.ready!==false){state=clock.accept(next);notify();render()}else clearOutput()}
- }catch(e){/* Keep the last scene while reconnecting; the clock stops extrapolating after 15 s. */}
- finally{pollPending=false}
-}
+function acceptState(next,delay=0){if(next&&next.ready!==false){state=clock.accept(next,performance.now(),delay);notify();render()}else clearOutput()}
+const relay=ManokaraRelay.connect({url:relayStateUrl(),token:relayViewToken,
+ receive(next,delay){if(performance.now()-directAt>750)acceptState(next,delay)},
+ revoked(){viewerRevoked=true;directAt=-Infinity;clearOutput('OBS link expired or revoked. Copy a new link from Manokara.')}});
+try{const channel=new BroadcastChannel('manokara-live-'+relayRoom+'-'+relayViewToken);channel.onmessage=({data})=>{if(viewerRevoked||!data?.snapshot)return;directAt=performance.now();acceptState(data.snapshot,Math.max(0,Math.min(200,Date.now()-Number(data.sentAt||Date.now()))))};window.addEventListener('pagehide',()=>channel.close(),{once:true})}catch(_){}
 function animate(){if(!document.hidden)render();requestAnimationFrame(animate)}
-poll();setInterval(poll,200);requestAnimationFrame(animate);setInterval(()=>{if(document.hidden)render()},200);
+requestAnimationFrame(animate);setInterval(()=>{if(document.hidden)render()},200);
 </script>
 </body>
 </html>

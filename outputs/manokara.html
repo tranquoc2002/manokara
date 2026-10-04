@@ -86,6 +86,7 @@ footer{flex:none;font-size:11px;padding:3px 8px!important}
 <div class="card"><b>🟩 Green-screen lyrics window</b>
 <div class="row"><button id="lwin">Open window</button><label class="mu">Size <input type="range" id="lsz" min="24" max="160" value="64"></label><label class="mu">Text <input type="color" id="lcol" value="#ffffff"></label><label class="mu">Background <select id="lbgmode"><option value="transparent">Transparent</option><option value="green">Green screen</option></select></label><label class="mu">Color theme <select id="ltheme"><option value="effect">Effect palette</option><option value="white">White</option><option value="cyan">Ice cyan</option><option value="rose">Rose</option><option value="amber">Amber</option><option value="violet">Violet</option><option value="mint">Mint</option></select></label><button class="s" id="lrandom" title="Randomize JIZURA lyric motion">🎲 Random JIZURA style</button></div>
 <div class="row"><label class="mu">Lyric effect <select id="lfx"><option value="jizura">JIZURA Auto · full effects</option><optgroup label="Folia Major · original visualizers (AGPL-3.0)"><option value="folia-classic">Folia · Luminous</option><option value="folia-cadenza">Folia · Mindscape</option><option value="folia-partita">Folia · Cloud Steps</option><option value="folia-fume">Folia · Fume</option><option value="folia-cappella">Folia · Cappella</option><option value="folia-tilt">Folia · Tilt</option><option value="folia-claddagh">Folia · Claddagh</option><option value="folia-monet">Folia · Monet</option><option value="folia-diorama">Folia · Diorama</option><option value="folia-pendolo">Folia · Pendolo</option><option value="folia-sonnet">Folia · Sonnet</option><option value="folia-tempera">Folia · Tempera</option><option value="folia-lumiere">Folia · Lumiere</option></optgroup><option value="tempera">Tempera · LumiSynth-inspired ink</option><option value="sonnet">Sonnet · LumiSynth-inspired kinetic focus</option><option value="lumiere">Lumiere · LumiSynth-inspired light reveal</option><option value="hanabi">Hanabi · LumiSynth-inspired character burst</option><option value="clean">Clean fade</option><option value="word-pop">Word pop</option><option value="neon">Neon sweep</option><option value="glitch">Glitch hit</option></select></label><small>Folia entries use the original visualizer renderers and Manokara LRC timing. JIZURA and the LumiSynth-inspired presets remain available.</small></div>
+<div class="row"><button class="s" id="audioReaction">Enable audio reaction</button><small id="audioStatus">Share the karaoke tab with tab audio enabled. No recording.</small></div>
 <div class="row" id="centerRow"><label class="mu"><input type="checkbox" id="lcenter"> Keep centre free</label><label class="mu">Frame <select id="lshape"><option value="auto">Auto (output frame)</option><option value="wide">Wide</option><option value="tall">Tall</option></select></label><div class="cf-preview" id="cfpreview" data-shape="wide" title="Dotted outline marks the character-safe area"><span class="cf-free"></span><i class="cf-line cf-a"></i><i class="cf-line cf-b"></i></div><small class="cf-preview-label" id="centerHint">Lyrics alternate around the open centre in supported effects.</small></div>
 <div class="row"><label class="mu">Font <select id="lfont"></select></label><input id="lfc" maxlength="120" placeholder="Custom font name (optional)" style="width:200px"><label class="mu"><input type="checkbox" id="lbold" checked> Bold</label><small>☁ = Google Fonts (needs internet). A custom name uses an installed font, or a Google font of that name.</small></div>
 <div class="row"><span class="mu">Live sync:</span><button class="s" id="lm">−0.5 s</button><button class="s" id="lp">+0.5 s</button><button class="s" id="lz">Reset</button><b id="offv" title="Current live sync offset">Sync: 0.0 s</b><small id="offh">Moves the lyrics of the song that is playing. + shows lines earlier, − shows them later. Lyrics time 0 = when the song starts here.</small></div>
@@ -97,6 +98,7 @@ footer{flex:none;font-size:11px;padding:3px 8px!important}
 <div id="pan" class="mu">Play a song to see its lyrics.</div><small class="mu" id="pinfo"></small></aside></div>
 
 <script src="./manokara-core.js"></script>
+<script src="./manokara-audio.js"></script>
 <script src="./manokara-lyrics.js"></script>
 <script src="./manokara-lyrics-editor.js"></script>
 <script src="./manokara-session.js"></script>
@@ -249,17 +251,24 @@ updateCenterPreview();
 window.addEventListener('resize',updateCenterPreview);
 syncFxInputs();
 $('#lwin').onclick=()=>{if(!relayInitialized){msg('Wait for the lyric relay to connect.');return}const opened=window.open(window.ManokaraSession.obsUrl(true),'kpt-lyrics','width=1280,height=720');if(!opened)msg('Popup blocked. Please allow popups.');else msg('Green-screen window opened. It shares the OBS effect output.');};
-let relayUp=null,publishPending=false;
+let relayUp=null,publishPending=false,relayScene=null;
+const relayDynamicFields=['writerId','time','sampledAt','playing','paused','counting','countdownRemaining','uploadDelayMs','audioPower','audioBass','audioLowMid','audioMid','audioVocal','audioTreble'];
+const uploadLatency=ManokaraCore.createLatencyEstimator();
+const audioReaction=ManokaraAudio.create($('#audioReaction'),$('#audioStatus'));
+let directChannel=null,directChannelName='';
+function sendDirectSnapshot(){
+ if(!relayInitialized||relayUp!==true)return;
+ try{const token=new URL(window.ManokaraSession.obsUrl(false)).hash.slice(1),name='manokara-live-'+relayRoom+'-'+new URLSearchParams(token).get('view');if(name!==directChannelName){directChannel?.close();directChannel=new BroadcastChannel(name);directChannelName=name}directChannel.postMessage({snapshot:makeObsSnapshot(),sentAt:Date.now()})}catch(_){}
+}
+window.addEventListener('pagehide',()=>directChannel?.close());
+setInterval(sendDirectSnapshot,100);
 function setRelayStatus(ok,owned=true){const el=$('#relayStatus');if(!el)return;
  if(ok){el.textContent=owned?'OBS relay connected':'OBS relay active · another window controls lyrics';el.style.color=owned?'#16a34a':'#64748b'}
  else if(location.protocol==='file:'){el.innerHTML='OBS relay unavailable on file:// · <a href="http://localhost:8000/manokara.html">open server version</a>';el.style.color='#dc2626'}
  else if(location.protocol==='https:'){el.textContent='Lyric relay unavailable · check deployment';el.style.color='#dc2626'}
  else{el.textContent='OBS relay unavailable · start manokara_server.py';el.style.color='#dc2626'}
 }
-async function publishObsState(){
- if(publishPending||!relayInitialized||relayUp==='inactive')return;
- publishPending=true;
- try{
+function makeObsSnapshot(){
  const it=ci,custom=$('#lfc').value.trim().replace(/["<>]/g,'');
  const font=custom?'"'+custom+'"':(FONTS[+$('#lfont').value]||FONTS[0])[1];
  const remaining=counting?Math.max(0,cdLeft-(paused?0:(Date.now()-cdLast)/1000)):0;
@@ -268,7 +277,17 @@ async function publishObsState(){
  const playing=mediaPlaying();
  const rawTime=!counting&&it&&!it.mc?elapsed():0,time=rawTime+(it&&!it.mc&&!counting?(it.off||0):0);
  const snapshot={writerId:relayPageId,ready:true,title:it&&!it.mc?it.title:'',lrc:it&&!it.mc?ManokaraLyrics.displayLrc(it):'',romajiLrc:it&&!it.mc?ManokaraLyrics.secondaryLrc(it):'',time,sampledAt:Date.now(),timelineVersion,playing,paused:!!paused,counting:!!counting,countdownRemaining:remaining,duration:it&&!it.mc?lyricDuration(it):0,mc:!!(it&&it.mc),memo:it&&it.mc?it.memo||'':'',size:+$('#lsz').value||64,foreground:$('#lcol').value,themeSeed,background:$('#lbgmode').value==='green'?'#00ff00':'transparent',transparent:$('#lbgmode').value!=='green',bold:$('#lbold').checked,font,googleFont,effect,centerFree:$('#lcenter').checked,centerShape:$('#lshape').value,colorTheme:$('#ltheme').value};
- const r=await window.ManokaraSession.api(relayUrl('/__lyric-state'),snapshot);if(r.status===409){if(relayUp!=='inactive')setRelayStatus(true,false);relayUp='inactive';return}if(!r.ok)throw Error('relay unavailable');await r.json();if(relayUp!==true)setRelayStatus(true);relayUp=true
+ Object.assign(snapshot,playing?audioReaction.sample():{audioPower:0,audioBass:0,audioLowMid:0,audioMid:0,audioVocal:0,audioTreble:0});return snapshot;
+}
+async function publishObsState(){
+ if(publishPending||!relayInitialized||relayUp==='inactive')return;
+ publishPending=true;
+ try{
+ const snapshot=makeObsSnapshot();snapshot.uploadDelayMs=uploadLatency.oneWay();const started=performance.now();
+ const partial=relayScene&&Object.keys(snapshot).every(key=>relayDynamicFields.includes(key)||snapshot[key]===relayScene[key]);
+ const packet=partial?Object.fromEntries(relayDynamicFields.map(key=>[key,snapshot[key]])):snapshot;
+ const target=new URL(relayUrl('/__lyric-state'));if(partial)target.searchParams.set('patch','1');
+ const r=await window.ManokaraSession.api(target,packet);if(r.status===428){relayScene=null;return}if(r.status===409){if(relayUp!=='inactive')setRelayStatus(true,false);relayUp='inactive';return}if(!r.ok)throw Error('relay unavailable');await r.json();relayScene=snapshot;uploadLatency.record(performance.now()-started);if(relayUp!==true)setRelayStatus(true);relayUp=true
  }
  catch(e){if(relayUp!==false)setRelayStatus(false);relayUp=false}
  finally{publishPending=false}

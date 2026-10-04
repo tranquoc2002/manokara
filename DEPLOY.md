@@ -85,6 +85,7 @@ Stop the server, update the project and install its requirements, then run your 
 ```sh
 .venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python -m pytest tests/test_security.py
+.venv/bin/python -m pytest tests/test_relay_stream.py
 node --test tests/test_core.cjs
 ```
 
@@ -105,6 +106,12 @@ For local HTTP development only, set `MANOKARA_ORIGIN=http://localhost:8000` and
 Deploy the entire `outputs/romaji-assets/` directory along with the new lyric editor/worker scripts. The Japanese dictionary and converter are prebuilt (approximately 18 MB); no translation service or new Python dependency is required. They load only when **Create Romaji** is clicked and are cacheable public assets. Restart the Python server after updating so its asset allowlist includes the new files, reload the controller, and Refresh the OBS Browser Source. A new controller sends a `romajiLrc` field, so the old server must be updated even for Original mode.
 
 To rebuild Romaji assets from pinned dependencies, run `npm ci --ignore-scripts` and `npm run build:romaji` from the repository root. This is a developer step; normal deployment uses the committed bundle and dictionary. **Lyricsify ↗** opens external search and **Import LRC** reads the downloaded file locally; the backend does not scrape Lyricsify.
+
+## Live OBS updates
+
+Deploy `manokara-relay.js`, `manokara-audio.js`, the updated controller/core/server and the rebuilt Folia entry/bundles together, then restart Python and refresh both the controller and OBS source. OBS uses `GET /__lyric-state?room=…&stream=1` with its existing Authorization header and `Content-Type: text/event-stream`. Preserve that content type through Cloudflare Tunnel; do not cache/buffer the endpoint. Normal polling remains available when streaming cannot connect. Keep one backend worker, as room playback/events live in that process. Audio sharing requires a secure context (HTTPS or local loopback) and explicit user selection of a tab with audio enabled.
+
+Cloudflare documents its streaming content-type requirement in [Tunnel troubleshooting](https://developers.cloudflare.com/tunnel/troubleshooting/). The app sends no recording, only six energy levels; actual lyric/word timing comes from LRC, not audio beat detection.
 
 ## Source and notices
 

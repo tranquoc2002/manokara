@@ -1,0 +1,1 @@
+import{m as e}from"./urlBackground-DEWo95SM.js";var t=e(e=>({message:null,setMessage:t=>e(e=>({message:typeof t==`function`?t(e.message):t}))})),n=e=>{t.getState().setMessage(e)};export{n as t};

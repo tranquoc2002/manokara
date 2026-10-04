@@ -18,8 +18,8 @@ import type { ObsAiConfig } from '../../services/gemini';
 // Source-neutral browser OBS overlay shell: consumes an injected WebLyricSource
 // (NowPlaying / PlayerCap / ...) plus the URL cfg appearance, reusing the same
 // VisualizerRenderer pipeline as the main window (4K scaling, rAF clock, transparent bg).
-// A pure browser OBS source has no local audio, so the spectrum/energy stay 0 (visuals
-// take the static / low-energy branch).
+// Optional controller tab-audio levels drive the audio MotionValues without React updates.
+// Without audio sharing the spectrum/energy stay 0 (static / low-energy visuals).
 
 const EMPTY_SPECTRUM = new Uint8Array(0);
 
@@ -30,9 +30,10 @@ interface ObsWebSourceAppProps {
     // Dynamic AI mode: when set, the overlay regenerates an AI theme per song (overrides cfg/cover);
     // null/undefined keeps the cfg-or-cover behavior unchanged.
     obsAiConfig?: ObsAiConfig | null;
+    getAudioSnapshot?: () => {audioPower?: number; audioBass?: number; audioLowMid?: number; audioMid?: number; audioVocal?: number; audioTreble?: number} | null;
 }
 
-const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, obsAiConfig }) => {
+const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, obsAiConfig, getAudioSnapshot }) => {
     const { state, getCurrentTimeSec } = source;
     const { isDaylight, transparent } = appearance;
 
@@ -49,6 +50,8 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
     const linesRef = useRef<Line[]>([]);
     const getTimeRef = useRef(getCurrentTimeSec);
     getTimeRef.current = getCurrentTimeSec;
+    const audioSnapshotRef = useRef(getAudioSnapshot);
+    audioSnapshotRef.current = getAudioSnapshot;
     linesRef.current = state.lyrics?.lines ?? [];
 
     const currentTime = useMotionValue(0);
@@ -163,7 +166,18 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
     useEffect(() => {
         let frameId = 0;
         let lastPausedSync = -Infinity;
+        let lastFrameMs = performance.now();
         const tick = () => {
+            // Audio envelopes remain outside React; interpolate between network samples.
+            const frameMs = performance.now(), dt = Math.min(.1, Math.max(0, (frameMs - lastFrameMs) / 1000));
+            lastFrameMs = frameMs;
+            const sample = audioSnapshotRef.current?.();
+            const levels = [[audioPower, sample?.audioPower], [bass, sample?.audioBass], [lowMid, sample?.audioLowMid],
+                [mid, sample?.audioMid], [vocal, sample?.audioVocal], [treble, sample?.audioTreble]] as const;
+            for (const [motion, raw] of levels) {
+                const target = Math.max(0, Math.min(1, Number(raw) || 0)), value = motion.get();
+                motion.set(value + (target - value) * (1 - Math.exp(-dt / (target > value ? .04 : .12))));
+            }
             const lyricTime = getTimeRef.current(Date.now());
             // A lazy-mounted word renderer can miss the initial clock event when playback
             // is paused. Give it a sub-microsecond resample; lyric position remains unchanged.
@@ -186,7 +200,7 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
 
         frameId = window.requestAnimationFrame(tick);
         return () => window.cancelAnimationFrame(frameId);
-    }, [currentTime]);
+    }, [currentTime, audioPower, bass, lowMid, mid, vocal, treble]);
 
     // Derive paused from the clock (single source of truth) so lyric advance and visual
     // animation never disagree — before the first pause-state event playerState is still
@@ -207,12 +221,12 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
 
     // Overlay the cfg font stack onto the resolved theme so the OBS fonts match the main window
     // (same helper as the main app). appStyle {} keeps theme.backgroundColor.
-    const { visualizerTheme, visualizerSubtitleTheme } = buildVisualizerTheme({
+    const { visualizerTheme, visualizerSubtitleTheme } = useMemo(() => buildVisualizerTheme({
         appStyle: {},
         theme,
         lyricsFontStyle: appearance.lyricsFontStyle ?? theme.fontStyle,
-        lyricsFontWeight: appearance.lyricsFontWeight,
-        lyricsCustomFontFamily: appearance.lyricsCustomFontFamily ?? null,
+        lyricsFontWeight: appearance.lyricsFontWeight ?? theme.fontWeight,
+        lyricsCustomFontFamily: appearance.lyricsCustomFontFamily ?? theme.fontFamily ?? null,
         lyricsFontFallbackFamilies: appearance.lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics: appearance.subtitleFontInheritsLyrics,
         subtitleFontStyle: appearance.subtitleFontStyle,
@@ -220,7 +234,7 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
         subtitleFontFamily: appearance.subtitleFontFamily,
         subtitleFontFallbackFamilies: appearance.subtitleFontFallbackFamilies,
         visualizerMode: appearance.mode,
-    });
+    }), [theme, appearance]);
 
     return (
         <div

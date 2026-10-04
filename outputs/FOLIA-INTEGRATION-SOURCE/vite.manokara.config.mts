@@ -8,7 +8,7 @@ export default defineConfig({
   root,
   base: './',
   plugins: [react()],
-  resolve: { alias: { '@': path.resolve(root, 'src') } },
+  resolve: { preserveSymlinks: true, alias: { '@': path.resolve(root, 'src') } },
   build: {
     outDir: path.resolve(root, 'folia-dist'),
     emptyOutDir: true,
