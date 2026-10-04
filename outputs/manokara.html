@@ -53,9 +53,9 @@ header{flex:0 0 32px}#grid{display:grid;grid-template-columns:minmax(220px,270px
 @media(max-width:640px){#workspace{grid-template-columns:minmax(0,1fr)}header{gap:8px;flex-wrap:wrap}.row>input{min-width:0!important}#stage{max-height:none}#setlistSide{height:25vh}}
 footer{flex:none;font-size:11px;padding:3px 8px!important}
 </style></head><body>
-<header><div><h1>🎤 manokara</h1></div><div class="row" style="margin:0"><button class="s" id="transpose">🎵 Transpose</button><button class="s" id="theme">☀ / ☾</button><button class="s" id="logout">Sign out</button></div></header>
+<header><div><h1>🎤 manokara</h1></div><div class="row" style="margin:0"><button class="s" id="transpose">🎵 Transpose</button><button class="s" id="theme">☀ / ☾</button></div></header>
 <div id="transposeDialog" class="modal-backdrop" hidden role="presentation"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="transposeTitle"><h2 id="transposeTitle">Use Transpose with Manokara</h2><p>Transpose is a browser extension for pitch, speed, and loops. Install it in the browser profile you use for Manokara.</p><ol><li>Install Transpose using the button below.</li><li>Open Manokara in a browser window with the extension toolbar visible.</li><li>Play a song, then open Transpose from the toolbar.</li></ol><p>If the extension does not detect embedded video, allow access to Manokara and YouTube, then try its <b>Tab Audio</b> mode. A new window uses your current browser profile.</p><div class="row"><button id="transposeInstall">Install Transpose</button><button class="s" id="transposeOpen">Open Manokara window</button><button class="s" id="transposeClose">Close</button></div><small id="transposeStatus" class="mu" aria-live="polite"></small></section></div>
-<div id="warn" hidden><b>Open Manokara through its configured server URL.</b> The lyric relay and operator login require the Python server. See DEPLOY.md for setup.</div>
+<div id="warn" hidden><b>Open Manokara through its configured server URL.</b> The lyric relay requires the Python server. See DEPLOY.md for setup.</div>
 
 <div id="grid"><aside class="card" id="setlistSide"><b>Setlist</b><ol id="list"></ol><div class="row"><button class="s" id="clr">Clear all</button></div></aside><div id="maincol">
 <div class="card" id="player"><div id="stage">Waiting to play…</div>
@@ -263,7 +263,6 @@ async function publishObsState(){
 }
 $('#copyobs').onclick=async()=>{try{await navigator.clipboard.writeText($('#obsurl').value);msg('OBS URL copied.')}catch(e){$('#obsurl').select();msg('Select and copy the OBS URL.')}};
 $('#rotateobs').onclick=async()=>{try{await window.ManokaraSession.rotate();$('#obsurl').value=window.ManokaraSession.obsUrl(false);msg('Previous OBS link revoked. Update your OBS Browser Source with this new URL.')}catch(e){msg(e.message)}};
-$('#logout').onclick=async()=>{const r=await window.ManokaraSession.api('/__logout',{});if(r.ok)location.replace('/manokara-login.html')};
 setInterval(publishObsState,200);
 relayReady.then(()=>publishObsState()).catch(e=>{setRelayStatus(false);msg(e.message)});
 setInterval(()=>{if(relayUp===true)relayServerAction('renew')},5000);

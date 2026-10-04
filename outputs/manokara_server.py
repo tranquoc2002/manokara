@@ -1,11 +1,10 @@
-"""Authenticated Manokara app and relay. Run one worker on loopback."""
+"""Public Manokara app with private browser rooms. Run one worker on loopback."""
 
 import asyncio
 import base64
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-import getpass
 import hashlib
 import hmac
 import ipaddress
@@ -24,12 +23,13 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.routing import Route
-from starlette.concurrency import run_in_threadpool
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 262_144
 MAX_ROOMS = 128
-SESSION_SECONDS = 43_200
+MAX_ROOMS_PER_BROWSER = 8
+MAX_SESSIONS = 1024
+SESSION_SECONDS = 30 * 86400
 WRITER_SECONDS = 15
 ROOM_ID = re.compile(r"^[a-f0-9]{32}$")
 EFFECTS = set("jizura tempera sonnet lumiere hanabi clean word-pop neon glitch".split()) | {
@@ -37,24 +37,9 @@ EFFECTS = set("jizura tempera sonnet lumiere hanabi clean word-pop neon glitch".
 }
 
 
-def password_hash(password, salt=None):
-    salt = salt or secrets.token_hex(16)
-    key = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=32768, r=8, p=1, maxmem=67_108_864)
-    return f"scrypt:{salt}:{key.hex()}"
-
-
-def valid_password_hash(value):
-    return re.fullmatch(r"scrypt:[a-f0-9]{32}:[a-f0-9]{128}", value or "") is not None
-
-
-def verify_password(password, encoded):
-    return hmac.compare_digest(password_hash(password, encoded.split(":")[1]), encoded)
-
-
 @dataclass(frozen=True)
 class Settings:
     origin: str
-    password: str
     data_dir: Path
     allow_http: bool = False
 
@@ -65,8 +50,6 @@ class Settings:
             raise ValueError("MANOKARA_ORIGIN must be an exact origin, e.g. https://karaoke.example.com (no trailing slash).")
         if url.scheme != "https" and not (self.allow_http and url.hostname in ("localhost", "127.0.0.1", "::1")):
             raise ValueError("HTTPS is required; MANOKARA_ALLOW_HTTP=1 permits local loopback development only.")
-        if not valid_password_hash(self.password):
-            raise ValueError("Set MANOKARA_PASSWORD_HASH using the hash-password command.")
         _ = url.port
         if self.data_dir.resolve().is_relative_to(ROOT):
             raise ValueError("MANOKARA_DATA_DIR must be outside the web assets directory.")
@@ -82,7 +65,7 @@ class Settings:
     @classmethod
     def from_env(cls):
         state_home = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
-        return cls(os.environ.get("MANOKARA_ORIGIN", ""), os.environ.get("MANOKARA_PASSWORD_HASH", ""),
+        return cls(os.environ.get("MANOKARA_ORIGIN", ""),
                    Path(os.environ.get("MANOKARA_DATA_DIR") or state_home / "manokara").expanduser(),
                    os.environ.get("MANOKARA_ALLOW_HTTP") == "1")
 
@@ -110,18 +93,27 @@ class Store:
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS sessions (digest TEXT PRIMARY KEY, expires REAL NOT NULL);
-            CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, epoch INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, epoch INTEGER NOT NULL DEFAULT 0, owner TEXT);
         """)
+        if "owner" not in {column[1] for column in self.db.execute("PRAGMA table_info(rooms)")}:
+            # Legacy rooms used a shared operator credential and have no private owner.
+            # They cannot safely become writable by anonymous visitors.
+            self.db.execute("ALTER TABLE rooms ADD COLUMN owner TEXT")
+            self.db.execute("DELETE FROM sessions")
+        self.db.execute("CREATE INDEX IF NOT EXISTS room_owner ON rooms(owner)")
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('secret', ?)", (secrets.token_hex(32),))
         self.secret = bytes.fromhex(self.db.execute("SELECT value FROM meta WHERE key='secret'").fetchone()[0])
-        fingerprint = hashlib.sha256(settings.password.encode()).hexdigest()
-        previous = self.db.execute("SELECT value FROM meta WHERE key='password'").fetchone()
-        if not previous or not hmac.compare_digest(previous[0], fingerprint):
-            self.db.execute("DELETE FROM sessions")
-            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('password', ?)", (fingerprint,))
-        self.db.execute("DELETE FROM sessions WHERE expires <= ?", (time.time(),))
-        self.db.commit()
+        self.db.execute("DELETE FROM meta WHERE key='password'")
         self.live = {}
+        self.cleanup()
+
+    def cleanup(self):
+        self.db.execute("DELETE FROM sessions WHERE expires <= ?", (time.time(),))
+        stale = self.db.execute("SELECT id FROM rooms WHERE owner IS NULL OR owner NOT IN (SELECT digest FROM sessions)").fetchall()
+        self.db.execute("DELETE FROM rooms WHERE owner IS NULL OR owner NOT IN (SELECT digest FROM sessions)")
+        self.db.commit()
+        for (room_id,) in stale:
+            self.live.pop(room_id, None)
 
     def session(self, token):
         if not token or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
@@ -130,31 +122,40 @@ class Store:
         row = self.db.execute("SELECT expires FROM sessions WHERE digest=?", (digest,)).fetchone()
         return digest if row and row[0] > time.time() else None
 
-    def login(self):
-        token = secrets.token_urlsafe(32)
-        self.db.execute("DELETE FROM sessions WHERE expires <= ?", (time.time(),))
-        self.db.execute("DELETE FROM sessions WHERE digest IN (SELECT digest FROM sessions ORDER BY expires DESC LIMIT -1 OFFSET 31)")
-        self.db.execute("INSERT INTO sessions VALUES (?, ?)", (hashlib.sha256(token.encode()).hexdigest(), time.time() + SESSION_SECONDS))
+    def start_session(self, token):
+        self.cleanup()
+        digest = self.session(token)
+        if digest:
+            self.db.execute("UPDATE sessions SET expires=? WHERE digest=?", (time.time() + SESSION_SECONDS, digest))
+        else:
+            if self.db.execute("SELECT count(*) FROM sessions").fetchone()[0] >= MAX_SESSIONS:
+                raise HTTPException(503, "Visitor limit reached. Try again later.")
+            token = secrets.token_urlsafe(32)
+            self.db.execute("INSERT INTO sessions VALUES (?, ?)", (hashlib.sha256(token.encode()).hexdigest(), time.time() + SESSION_SECONDS))
         self.db.commit()
         return token
 
-    def logout(self, digest):
-        self.db.execute("DELETE FROM sessions WHERE digest=?", (digest,))
-        self.db.commit()
-
-    def room(self, room_id):
+    def room(self, room_id, digest=None):
         if not isinstance(room_id, str) or not ROOM_ID.fullmatch(room_id):
             raise HTTPException(404, "Room not found.")
-        row = self.db.execute("SELECT epoch FROM rooms WHERE id=?", (room_id,)).fetchone()
-        if not row:
+        row = self.db.execute("""SELECT rooms.epoch, rooms.owner FROM rooms
+                               JOIN sessions ON rooms.owner=sessions.digest
+                               WHERE rooms.id=? AND sessions.expires>?""", (room_id, time.time())).fetchone()
+        if not row or digest is not None and row[1] != digest:
             raise HTTPException(404, "Room not found.")
         return row[0]
 
-    def create_room(self):
+    def owns_room(self, room_id, digest):
+        return digest is not None and self.db.execute("SELECT owner FROM rooms WHERE id=?", (room_id,)).fetchone() == (digest,)
+
+    def create_room(self, digest):
+        self.cleanup()
+        if self.db.execute("SELECT count(*) FROM rooms WHERE owner=?", (digest,)).fetchone()[0] >= MAX_ROOMS_PER_BROWSER:
+            raise HTTPException(409, "Your room limit is reached. Reuse or delete an existing room.")
         if self.db.execute("SELECT count(*) FROM rooms").fetchone()[0] >= MAX_ROOMS:
-            raise HTTPException(409, "Room limit reached. Delete an unused room before creating another.")
+            raise HTTPException(503, "Room limit reached. Try again later.")
         room_id = secrets.token_hex(16)
-        self.db.execute("INSERT INTO rooms (id) VALUES (?)", (room_id,))
+        self.db.execute("INSERT INTO rooms (id, owner) VALUES (?, ?)", (room_id, digest))
         self.db.commit()
         return room_id
 
@@ -251,7 +252,7 @@ def snapshot(payload):
 def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
-             "manokara-login.html", "manokara-login.js", "manokara-session.js", "manokara-core.js"]
+             "manokara-session.js", "manokara-core.js"]
     result = {"/" + name: ROOT / name for name in names}
     for file in (ROOT / "folia-assets").iterdir():
         if file.suffix in (".js", ".css", ".png") and file.is_file():
@@ -278,7 +279,7 @@ def csp_for(path):
                 digest = base64.b64encode(hashlib.sha256(code.encode()).digest()).decode()
                 hashes.append(f"'sha256-{digest}'")
     # The bundled Pixi renderer generates uniform/shader functions at runtime.
-    # Scope that exception to Folia's viewer document, never the controller/login.
+    # Scope that exception to Folia's viewer document, never the controller.
     pixi_eval = " 'unsafe-eval'" if path == ROOT / "manokara-folia.html" else ""
     pixi_connect = " data: blob:" if path == ROOT / "manokara-folia.html" else ""
     return "; ".join([
@@ -333,13 +334,12 @@ class SecurityHeaders:
 def create_app(settings=None):
     settings = settings or Settings.from_env()
     store, limiter = Store(settings), Limiter()
-    password_slots = asyncio.Semaphore(2)
     manifest = asset_manifest()
 
-    def operator(request):
+    def browser_session(request):
         digest = store.session(request.cookies.get(settings.cookie))
         if not digest:
-            raise HTTPException(401, "Sign in to control Manokara.")
+            raise HTTPException(401, "Reload the app to open your browser session. Cookies must be enabled.")
         return digest
 
     def client_ip(request):
@@ -351,46 +351,35 @@ def create_app(settings=None):
                 return peer
         return peer
 
-    async def login(request):
-        limiter.check(("login", client_ip(request)), 5 / 60, 5)
-        limiter.check("login-global", 20 / 60, 20)
-        payload = await read_json(request, 2048)
-        password = payload.get("password")
-        if not isinstance(password, str) or not 1 <= len(password) <= 1024:
-            raise HTTPException(400, "Invalid password.")
-        # Bound scrypt memory even when several login requests arrive together.
-        async with password_slots:
-            accepted = await run_in_threadpool(verify_password, password, settings.password)
-        if not accepted:
-            raise HTTPException(401, "Incorrect password.")
+    async def open_session(request):
+        limiter.check(("session", client_ip(request)), 1, 20)
+        limiter.check("session-global", 10, 50)
+        await read_json(request, 1024)
+        token = request.cookies.get(settings.cookie)
+        if not store.session(token):
+            limiter.check(("new-session", client_ip(request)), 10 / 60, 10)
         response = JSONResponse({"ok": True})
-        response.set_cookie(settings.cookie, store.login(), max_age=SESSION_SECONDS, httponly=True,
+        response.set_cookie(settings.cookie, store.start_session(token), max_age=SESSION_SECONDS, httponly=True,
                             secure=settings.secure, samesite="strict", path="/")
         return response
 
-    async def logout(request):
-        store.logout(operator(request))
-        response = JSONResponse({"ok": True})
-        response.delete_cookie(settings.cookie, path="/", secure=settings.secure, httponly=True, samesite="strict")
-        return response
-
     async def room_info(request):
-        digest = operator(request)
+        digest = browser_session(request)
         limiter.check(("room", digest), 1, 10)
         payload = await read_json(request, 1024)
         room_id = payload.get("room")
         if room_id is None:
-            room_id = store.create_room()
+            room_id = store.create_room(digest)
         else:
-            store.room(room_id)
+            store.room(room_id, digest)
         return JSONResponse({"room": room_id, "viewToken": store.view_token(room_id)})
 
     async def room_change(request):
-        digest = operator(request)
+        digest = browser_session(request)
         limiter.check(("room", digest), 1, 10)
         payload = await read_json(request, 1024)
         room_id = payload.get("room")
-        store.room(room_id)
+        store.room(room_id, digest)
         if request.url.path == "/__room/rotate":
             store.db.execute("UPDATE rooms SET epoch=epoch+1 WHERE id=?", (room_id,))
             store.db.commit()
@@ -404,10 +393,10 @@ def create_app(settings=None):
         return store.live.setdefault(room_id, {"owner": None, "until": 0, "snapshot": {"ready": False}})
 
     async def relay_owner(request):
-        digest = operator(request)
+        digest = browser_session(request)
         limiter.check(("owner", digest), 10, 30)
         room_id = request.query_params.get("room")
-        store.room(room_id)
+        store.room(room_id, digest)
         payload = await read_json(request, 1024)
         writer, action = payload.get("writerId"), payload.get("action")
         if not isinstance(writer, str) or not 1 <= len(writer) <= 128 or action not in ("claim", "renew", "release"):
@@ -423,8 +412,9 @@ def create_app(settings=None):
         room_id = request.query_params.get("room")
         if request.method in ("GET", "HEAD"):
             store.room(room_id)
-            if not store.session(request.cookies.get(settings.cookie)) and not store.viewer(room_id, request.headers.get("authorization", "")):
-                raise HTTPException(401, "A valid OBS link or operator login is required.")
+            digest = store.session(request.cookies.get(settings.cookie))
+            if not store.owns_room(room_id, digest) and not store.viewer(room_id, request.headers.get("authorization", "")):
+                raise HTTPException(401, "Use this room's controller browser or a valid OBS link.")
             limiter.check(("read", room_id), 40, 100)
             room = live_room(room_id)
             result = dict(room["snapshot"])
@@ -432,12 +422,12 @@ def create_app(settings=None):
                 # Age comes from this process's monotonic clock, not either device's wall clock.
                 result["stateAgeMs"] = max(0, (time.monotonic() - room["received_at"]) * 1000)
             return JSONResponse(result)
-        digest = operator(request)
+        digest = browser_session(request)
         limiter.check(("write", digest), 10, 30)
-        store.room(room_id)
+        store.room(room_id, digest)
         payload = snapshot(await read_json(request))
         room = live_room(room_id)
-        # An authenticated controller can recover automatically after restart/lease expiry.
+        # This room's controller can recover automatically after restart/lease expiry.
         # No await occurs between checking ownership and updating the room.
         if room["owner"] is None or room["until"] <= time.monotonic():
             room["owner"] = payload["writerId"]
@@ -455,8 +445,6 @@ def create_app(settings=None):
         path = request.url.path
         room = request.query_params.get("room", "")
         suffix = "?room=" + room if ROOM_ID.fullmatch(room) else ""
-        if path in ("/", "/manokara.html") and not store.session(request.cookies.get(settings.cookie)):
-            return RedirectResponse("/manokara-login.html" + suffix, status_code=303)
         if path == "/":
             return RedirectResponse("/manokara.html" + suffix, status_code=303)
         file = manifest.get(path)
@@ -474,7 +462,7 @@ def create_app(settings=None):
         store.db.close()
 
     app = Starlette(routes=[
-        Route("/__login", login, methods=["POST"]), Route("/__logout", logout, methods=["POST"]),
+        Route("/__session", open_session, methods=["POST"]),
         Route("/__room", room_info, methods=["POST"]), Route("/__room/rotate", room_change, methods=["POST"]),
         Route("/__room/delete", room_change, methods=["POST"]),
         Route("/__lyric-owner", relay_owner, methods=["POST"]),
@@ -487,16 +475,8 @@ def create_app(settings=None):
 
 
 def main():
-    if sys.argv[1:] == ["hash-password"]:
-        password = getpass.getpass("Operator password (at least 10 characters): ")
-        if len(password) < 10 or len(password) > 1024:
-            raise SystemExit("Use a password between 10 and 1024 characters.")
-        if password != getpass.getpass("Repeat password: "):
-            raise SystemExit("Passwords did not match.")
-        print(password_hash(password))
-        return
     if sys.argv[1:]:
-        raise SystemExit("Usage: python outputs/manokara_server.py [hash-password]")
+        raise SystemExit("Usage: python outputs/manokara_server.py")
     import uvicorn
     try:
         app = create_app()

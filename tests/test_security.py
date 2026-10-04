@@ -16,14 +16,11 @@ sys.modules[spec.name] = server
 spec.loader.exec_module(server)
 
 ORIGIN = "https://karaoke.example.com"
-PASSWORD = "test-password-with-enough-entropy"
-HASH = server.password_hash(PASSWORD)
 
 
 def test_default_database_is_created_in_user_state_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(server.Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.setenv("MANOKARA_ORIGIN", ORIGIN)
-    monkeypatch.setenv("MANOKARA_PASSWORD_HASH", HASH)
     monkeypatch.delenv("MANOKARA_DATA_DIR", raising=False)
     monkeypatch.delenv("XDG_STATE_HOME", raising=False)
     settings = server.Settings.from_env()
@@ -35,7 +32,6 @@ def test_default_database_is_created_in_user_state_directory(tmp_path, monkeypat
 
 def test_state_directory_supports_xdg_and_explicit_override(tmp_path, monkeypatch):
     monkeypatch.setenv("MANOKARA_ORIGIN", ORIGIN)
-    monkeypatch.setenv("MANOKARA_PASSWORD_HASH", HASH)
     monkeypatch.delenv("MANOKARA_DATA_DIR", raising=False)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
     assert server.Settings.from_env().data_dir == tmp_path / "xdg" / "manokara"
@@ -48,31 +44,15 @@ def test_unwritable_database_reports_directory_and_fix(tmp_path, monkeypatch):
         raise server.sqlite3.OperationalError("unable to open database file")
     monkeypatch.setattr(server.sqlite3, "connect", denied)
     with pytest.raises(ValueError) as error:
-        server.Store(server.Settings(ORIGIN, HASH, tmp_path))
+        server.Store(server.Settings(ORIGIN, tmp_path))
     assert str(tmp_path) in str(error.value)
     assert "MANOKARA_DATA_DIR" in str(error.value)
     assert "writable by the account running the server" in str(error.value)
 
 
-def test_password_generator_accepts_ten_characters(monkeypatch, capsys):
-    monkeypatch.setattr(server.sys, "argv", ["manokara_server.py", "hash-password"])
-    monkeypatch.setattr(server.getpass, "getpass", lambda prompt: "abcdefghij")
-    server.main()
-    encoded = capsys.readouterr().out.strip()
-    assert server.valid_password_hash(encoded)
-    assert server.verify_password("abcdefghij", encoded)
-
-
-def test_password_generator_rejects_nine_characters(monkeypatch):
-    monkeypatch.setattr(server.sys, "argv", ["manokara_server.py", "hash-password"])
-    monkeypatch.setattr(server.getpass, "getpass", lambda prompt: "abcdefghi")
-    with pytest.raises(SystemExit, match="between 10 and 1024"):
-        server.main()
-
-
 @pytest.fixture
 def app(tmp_path):
-    return server.create_app(server.Settings(ORIGIN, HASH, tmp_path))
+    return server.create_app(server.Settings(ORIGIN, tmp_path))
 
 
 @pytest.fixture
@@ -81,8 +61,8 @@ def client(app):
         yield client
 
 
-def sign_in(client):
-    response = client.post("/__login", json={"password": PASSWORD})
+def open_session(client):
+    response = client.post("/__session", json={})
     assert response.status_code == 200
     return response
 
@@ -99,44 +79,68 @@ def claim(client, room_id, writer="writer-A"):
 
 
 def test_startup_fails_without_valid_secure_settings(tmp_path):
-    for origin, encoded, local in [("", HASH, False), ("https://example.com/", HASH, False),
-                                   ("http://example.com", HASH, True), (ORIGIN, "password", False)]:
+    for origin, local in [("", False), ("https://example.com/", False),
+                          ("http://example.com", True), ("https://user@example.com", False)]:
         with pytest.raises(ValueError):
-            server.Settings(origin, encoded, tmp_path, local)
-    server.Settings("http://localhost:8000", HASH, tmp_path, True)
+            server.Settings(origin, tmp_path, local)
+    server.Settings("http://localhost:8000", tmp_path, True)
     with pytest.raises(ValueError):
-        server.Settings(ORIGIN, HASH, server.ROOT / "private")
+        server.Settings(ORIGIN, server.ROOT / "private")
 
 
-def test_anonymous_controller_access_denied(client):
-    assert client.get("/").headers["location"] == "/manokara-login.html"
-    assert client.get("/manokara.html").status_code == 303
-    for path in ("/__room", "/__room/rotate", "/__room/delete", "/__lyric-owner", "/__lyric-state", "/__logout"):
+def test_public_app_has_no_login_but_controls_need_browser_credential(client):
+    assert client.get("/").headers["location"] == "/manokara.html"
+    response = client.get("/manokara.html")
+    assert response.status_code == 200
+    assert 'id="logout"' not in response.text
+    assert '__logout' not in response.text
+    for path in ("/manokara-login.html", "/manokara-login.js", "/__login", "/__logout"):
+        assert client.get(path).status_code == 404
+        assert client.post(path, json={}).status_code in (404, 405)
+    for path in ("/__room", "/__room/rotate", "/__room/delete", "/__lyric-owner", "/__lyric-state"):
         assert client.post(path, json={}).status_code == 401
+    open_session(client)
+    assert room(client)["room"]
 
 
-def test_session_cookie_and_logout_revocation(client):
-    response = sign_in(client)
+def test_automatic_session_cookie_is_secure_and_reuses_identity(client, app):
+    response = open_session(client)
     cookie = response.headers["set-cookie"]
     for flag in ("__Host-manokara_session=", "HttpOnly", "Secure", "SameSite=strict", "Path=/"):
         assert flag in cookie
     assert "Domain=" not in cookie
     saved = client.cookies.get("__Host-manokara_session")
     assert client.get("/manokara.html").status_code == 200
-    assert client.post("/__logout", json={}).status_code == 200
-    client.cookies.set("__Host-manokara_session", saved, domain="karaoke.example.com", path="/")
-    assert client.post("/__room", json={}).status_code == 401
+    digest = app.state.store.session(saved)
+    app.state.store.db.execute("UPDATE sessions SET expires=? WHERE digest=?", (time.time() + 60, digest))
+    app.state.store.db.commit()
+    open_session(client)
+    assert client.cookies.get("__Host-manokara_session") == saved
+    assert app.state.store.db.execute("SELECT count(*) FROM sessions").fetchone()[0] == 1
+    expires = app.state.store.db.execute("SELECT expires FROM sessions WHERE digest=?", (digest,)).fetchone()[0]
+    assert expires > time.time() + server.SESSION_SECONDS - 10
 
 
 def test_session_expiry(client, app):
-    sign_in(client)
+    open_session(client)
+    info = room(client)
+    endpoint = f'/__lyric-state?room={info["room"]}'
+    assert client.post(endpoint, json={"writerId": "writer-A"}).status_code == 200
     app.state.store.db.execute("UPDATE sessions SET expires=?", (time.time() - 1,))
     app.state.store.db.commit()
     assert client.post("/__room", json={}).status_code == 401
+    assert client.get(endpoint, headers={"Authorization": "Bearer " + info["viewToken"]}).status_code == 404
+    open_session(client)
+    assert app.state.store.db.execute("SELECT count(*) FROM rooms").fetchone()[0] == 0
+    assert info["room"] not in app.state.store.live
+    assert client.post("/__room", json={"room": info["room"]}).status_code == 404
+    assert room(client)["room"] != info["room"]
 
 
 def test_host_origin_and_content_type_checks(client):
-    sign_in(client)
+    assert client.post("/__session", json={}, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert client.post("/__session", content="{}", headers={"Content-Type": "text/plain"}).status_code == 415
+    open_session(client)
     assert client.get("/healthz", headers={"Host": "evil.example"}).status_code == 400
     assert client.post("/__room", json={}, headers={"Origin": "https://evil.example"}).status_code == 403
     assert client.post("/__room", json={}, headers={"Origin": "null"}).status_code == 403
@@ -148,7 +152,7 @@ def test_host_origin_and_content_type_checks(client):
 
 
 def test_two_rooms_isolated_and_viewers_cannot_write(client):
-    sign_in(client)
+    open_session(client)
     a, b = room(client), room(client)
     claim(client, a["room"])
     assert client.post(f'/__lyric-state?room={a["room"]}', json={"writerId": "writer-A", "ready": True, "title": "A", "lrc": "[00:00]Hello"}).status_code == 200
@@ -164,8 +168,35 @@ def test_two_rooms_isolated_and_viewers_cannot_write(client):
         assert client.post(f'{path}?room={a["room"]}', json={"room": a["room"]}, headers=headers).status_code == 401
 
 
+def test_public_visitors_cannot_read_control_or_revoke_each_others_rooms(client):
+    open_session(client)
+    a = room(client)
+    first_cookie = client.cookies.get("__Host-manokara_session")
+    endpoint_a = f'/__lyric-state?room={a["room"]}'
+    assert client.post(endpoint_a, json={"writerId": "writer-A", "title": "First user's song"}).status_code == 200
+    client.cookies.clear()
+    open_session(client)
+    b = room(client)
+    assert a["room"] != b["room"]
+    assert first_cookie != client.cookies.get("__Host-manokara_session")
+    endpoint_b = f'/__lyric-state?room={b["room"]}'
+    assert client.post(endpoint_b, json={"writerId": "writer-B", "title": "Second user's song"}).status_code == 200
+    assert client.get(endpoint_a).status_code == 401
+    for path in ("/__room", "/__room/rotate", "/__room/delete"):
+        assert client.post(path, json={"room": a["room"]}).status_code == 404
+    assert client.post(f'/__lyric-owner?room={a["room"]}', json={"writerId": "writer-B", "action": "claim"}).status_code == 404
+    assert client.post(endpoint_a, json={"writerId": "writer-B", "title": "Hijacked"}).status_code == 404
+    # Even a valid OBS token grants this visitor viewing access only.
+    view_a = {"Authorization": "Bearer " + a["viewToken"]}
+    assert client.get(endpoint_a, headers=view_a).json()["title"] == "First user's song"
+    assert client.post(endpoint_a, json={"writerId": "writer-B"}, headers=view_a).status_code == 404
+    client.cookies.clear()
+    assert client.get(endpoint_a, headers=view_a).json()["title"] == "First user's song"
+    assert client.get(endpoint_b, headers={"Authorization": "Bearer " + b["viewToken"]}).json()["title"] == "Second user's song"
+
+
 def test_token_rotation_and_room_deletion(client):
-    sign_in(client)
+    open_session(client)
     info = room(client)
     rotated = client.post("/__room/rotate", json={"room": info["room"]}).json()
     assert rotated["viewToken"] != info["viewToken"]
@@ -180,7 +211,7 @@ def test_token_rotation_and_room_deletion(client):
 
 
 def test_writer_takeover_and_lease_expiry(client, app):
-    sign_in(client)
+    open_session(client)
     info = room(client)
     endpoint = f'/__lyric-state?room={info["room"]}'
     claim(client, info["room"])
@@ -198,14 +229,14 @@ def test_writer_takeover_and_lease_expiry(client, app):
     ("duration", -1), ("time", 10**1000), ("size", 9000), ("effect", "unknown"),
     ("foreground", "url(https://evil.example)"), ("extra", "field"), ("title", "a"*513)])
 def test_malformed_snapshot_rejected(client, field, value):
-    sign_in(client)
+    open_session(client)
     info = room(client)
     claim(client, info["room"])
     assert client.post(f'/__lyric-state?room={info["room"]}', json={"writerId": "writer-A", field: value}).status_code == 400
 
 
 def test_json_errors_and_size_limit(client):
-    sign_in(client)
+    open_session(client)
     info = room(client)
     endpoint = f'/__lyric-state?room={info["room"]}'
     for body in ('{"time":NaN}', '[]', '{', '{"time":Infinity}'):
@@ -216,7 +247,7 @@ def test_json_errors_and_size_limit(client):
 
 
 def test_frontend_default_snapshot_is_accepted(client):
-    sign_in(client)
+    open_session(client)
     info = room(client)
     claim(client, info["room"])
     payload = {"writerId": "writer-A", "ready": True, "title": "", "lrc": "", "time": 0,
@@ -234,13 +265,13 @@ def test_static_files_are_allowlisted_and_headers_present(client, tmp_path, monk
         assert client.get(path).status_code == 404
     assert client.get("/sources/FOLIA-MAJOR-LICENSE.txt").status_code == 200
     assert client.head("/sources/FOLIA-MAJOR-SOURCE.zip").status_code == 200
-    response = client.get("/manokara-login.html")
+    response = client.get("/manokara.html")
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["cache-control"] == "no-store"
     assert "default-src 'none'" in response.headers["content-security-policy"]
     assert "unsafe-eval" not in response.headers["content-security-policy"]
     assert response.headers["strict-transport-security"] == "max-age=31536000"
-    sign_in(client)
+    open_session(client)
     assert "unsafe-eval" not in client.get("/manokara.html").headers["content-security-policy"]
     assert "'sha256-" in client.get("/manokara.html").headers["content-security-policy"]
     assert "'unsafe-eval'" in client.get("/manokara-folia.html").headers["content-security-policy"]
@@ -256,12 +287,34 @@ def test_static_files_are_allowlisted_and_headers_present(client, tmp_path, monk
     assert not server.safe_asset(link)
 
 
-def test_login_rate_limit_and_wrong_password(client):
-    for _ in range(5):
-        assert client.post("/__login", json={"password": "incorrect"}).status_code == 401
-    response = client.post("/__login", json={"password": PASSWORD})
+def test_new_browser_allocations_are_rate_limited(client, app):
+    app.state.limiter.clock = lambda: 0.0
+    for _ in range(10):
+        open_session(client)
+        client.cookies.clear()
+    response = client.post("/__session", json={})
     assert response.status_code == 429
     assert response.headers["retry-after"] == "15"
+    assert app.state.store.db.execute("SELECT count(*) FROM sessions").fetchone()[0] == 10
+
+
+def test_room_and_session_storage_limits_keep_existing_visitors_working(client, app, monkeypatch):
+    monkeypatch.setattr(server, "MAX_ROOMS_PER_BROWSER", 1)
+    open_session(client)
+    info = room(client)
+    assert client.post("/__room", json={}).status_code == 409
+    assert client.post("/__room", json={"room": info["room"]}).json() == info
+    monkeypatch.setattr(server, "MAX_ROOMS", 1)
+    monkeypatch.setattr(server, "MAX_SESSIONS", 2)
+    client.cookies.clear()
+    open_session(client)
+    second_cookie = client.cookies.get("__Host-manokara_session")
+    assert client.post("/__room", json={}).status_code == 503
+    client.cookies.clear()
+    assert client.post("/__session", json={}).status_code == 503
+    client.cookies.set("__Host-manokara_session", second_cookie, domain="karaoke.example.com", path="/")
+    open_session(client)
+    assert app.state.store.db.execute("SELECT count(*) FROM sessions").fetchone()[0] == 2
 
 
 def test_limiter_recovers_and_is_bounded():
@@ -277,11 +330,11 @@ def test_limiter_recovers_and_is_bounded():
     assert len(limiter.buckets) == 10000
 
 
-def test_rooms_and_view_tokens_survive_restart_and_password_change_revokes_sessions(tmp_path):
-    settings = server.Settings(ORIGIN, HASH, tmp_path)
+def test_rooms_browser_identity_and_view_tokens_survive_restart(tmp_path):
+    settings = server.Settings(ORIGIN, tmp_path)
     first = server.create_app(settings)
     with TestClient(first, base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
-        sign_in(client)
+        open_session(client)
         info = room(client)
         claim(client, info["room"])
         assert client.post(f'/__lyric-state?room={info["room"]}', json={"writerId": "writer-A", "title": "before restart"}).status_code == 200
@@ -292,10 +345,28 @@ def test_rooms_and_view_tokens_survive_restart_and_password_change_revokes_sessi
         assert client.post("/__room", json={"room": info["room"]}).json() == info
         assert client.get(f'/__lyric-state?room={info["room"]}').json() == {"ready": False}
         assert client.post(f'/__lyric-state?room={info["room"]}', json={"writerId": "writer-A", "title": "recovered"}).status_code == 200
-    third = server.create_app(server.Settings(ORIGIN, server.password_hash("new-password-for-test"), tmp_path))
-    with TestClient(third, base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
-        client.cookies.set("__Host-manokara_session", cookie, domain="karaoke.example.com", path="/")
-        assert client.post("/__room", json={"room": info["room"]}).status_code == 401
+
+
+def test_upgrade_removes_shared_operator_rooms_without_granting_public_control(tmp_path):
+    legacy_token = "a" * 43
+    with server.sqlite3.connect(tmp_path / "relay.sqlite3") as db:
+        db.executescript("""
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE sessions (digest TEXT PRIMARY KEY, expires REAL NOT NULL);
+            CREATE TABLE rooms (id TEXT PRIMARY KEY, epoch INTEGER NOT NULL DEFAULT 0);
+        """)
+        db.execute("INSERT INTO meta VALUES ('secret', ?)", ("f" * 64,))
+        db.execute("INSERT INTO meta VALUES ('password', 'legacy-fingerprint')")
+        db.execute("INSERT INTO sessions VALUES (?, ?)", (server.hashlib.sha256(legacy_token.encode()).hexdigest(), time.time() + 3600))
+        db.execute("INSERT INTO rooms (id) VALUES (?)", ("a" * 32,))
+    app = server.create_app(server.Settings(ORIGIN, tmp_path))
+    with TestClient(app, base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
+        client.cookies.set("__Host-manokara_session", legacy_token, domain="karaoke.example.com", path="/")
+        assert client.post("/__room", json={"room": "a" * 32}).status_code == 401
+        open_session(client)
+        assert client.post("/__room", json={"room": "a" * 32}).status_code == 404
+        assert room(client)["room"] != "a" * 32
+        assert app.state.store.db.execute("SELECT value FROM meta WHERE key='password'").fetchone() is None
 
 
 def test_request_body_timeout_without_waiting_five_seconds(monkeypatch):
@@ -313,7 +384,7 @@ def test_request_body_timeout_without_waiting_five_seconds(monkeypatch):
 
 
 def test_relay_reports_server_age_without_trusting_device_clock(client, app):
-    sign_in(client)
+    open_session(client)
     info = room(client)
     endpoint = f'/__lyric-state?room={info["room"]}'
     assert client.post(endpoint, json={"writerId": "writer-A", "ready": True, "time": 4,
@@ -325,10 +396,10 @@ def test_relay_reports_server_age_without_trusting_device_clock(client, app):
     assert client.post(endpoint, json={"writerId": "writer-A", "stateAgeMs": 0}).status_code == 400
 
 
-def test_login_redirect_preserves_valid_room_only(client):
+def test_public_root_redirect_preserves_valid_room_only(client):
     valid = "a" * 32
-    assert client.get('/?room=' + valid).headers['location'] == '/manokara-login.html?room=' + valid
-    assert client.get('/?room=https://evil.example').headers['location'] == '/manokara-login.html'
+    assert client.get('/?room=' + valid).headers['location'] == '/manokara.html?room=' + valid
+    assert client.get('/?room=https://evil.example').headers['location'] == '/manokara.html'
 
 
 def test_public_hashed_bundles_cache_but_private_state_does_not(client):

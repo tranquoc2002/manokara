@@ -151,7 +151,7 @@ def exercise_controller(page, obs, origin):
     page.locator('#stop').click()
     obs.wait_for_function('() => document.querySelector("#current").textContent === "" && document.body.dataset.folia === "off"')
 
-    # Restore a predictable song for the all-effects/authentication smoke checks.
+    # Restore a predictable song for the all-effects/viewer-token smoke checks.
     page.locator('#lfx').select_option('clean')
     page.locator('#list li').nth(1).locator('[data-a="go"]').click()
     obs.wait_for_function('() => document.querySelector("#current").textContent === "Browser smoke test"')

@@ -21,9 +21,8 @@ def main():
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
     origin = f"http://127.0.0.1:{port}"
-    password = "browser-test-password-only"
     with tempfile.TemporaryDirectory() as state:
-        app = backend.create_app(backend.Settings(origin, backend.password_hash(password), Path(state), True))
+        app = backend.create_app(backend.Settings(origin, Path(state), True))
         server = uvicorn.Server(uvicorn.Config(app, access_log=False, log_level="warning", proxy_headers=False,
                                               timeout_graceful_shutdown=3))
         thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
@@ -39,9 +38,13 @@ def main():
                                                      args=["--autoplay-policy=no-user-gesture-required"])
                 controller = browser.new_context()
                 viewer = browser.new_context()
+                second_user = browser.new_context()
+                second_viewer = browser.new_context()
                 urls = []
                 controller.add_init_script("document.addEventListener('securitypolicyviolation', e => console.error('CSP-VIOLATION:' + e.violatedDirective + ':' + e.blockedURI))")
                 viewer.add_init_script("document.addEventListener('securitypolicyviolation', e => console.error('CSP-VIOLATION:' + e.violatedDirective + ':' + e.blockedURI))")
+                second_user.add_init_script("document.addEventListener('securitypolicyviolation', e => console.error('CSP-VIOLATION:' + e.violatedDirective + ':' + e.blockedURI))")
+                second_viewer.add_init_script("document.addEventListener('securitypolicyviolation', e => console.error('CSP-VIOLATION:' + e.violatedDirective + ':' + e.blockedURI))")
                 def watch(page):
                     page.on("pageerror", lambda error: errors.append(error.stack or str(error)))
                     page.on("console", lambda message: violations.append(message.text) if message.text.startswith("CSP-VIOLATION:") else None)
@@ -49,11 +52,9 @@ def main():
                 page = controller.new_page()
                 watch(page)
                 page.goto(origin)
-                assert page.url.endswith("/manokara-login.html")
-                page.locator("#password").fill(password)
-                page.locator("#submit").click()
                 page.wait_for_url("**/manokara.html?room=*")
                 page.wait_for_function("() => document.querySelector('#relayStatus').textContent === 'OBS relay connected'")
+                assert page.locator('input[type="password"], #logout').count() == 0
                 old_link = page.locator("#obsurl").input_value()
                 assert "#view=" in old_link and "view=" not in old_link.split("#")[0]
                 obs = viewer.new_page()
@@ -67,6 +68,30 @@ def main():
                 page.locator("#add").click()
                 page.locator("#list [data-a='go']").click()
                 obs.wait_for_function("() => document.querySelector('#current').textContent === 'Browser smoke test'")
+                # A different user opening the first controller URL gets their own room.
+                other = second_user.new_page()
+                watch(other)
+                other.goto(page.url)
+                other.wait_for_function("() => document.querySelector('#relayStatus').textContent === 'OBS relay connected'")
+                assert other.url != page.url
+                other.locator('#lfx').select_option('clean')
+                other.locator('#url').fill('https://example.com/second-user')
+                other.locator('#ttl').fill('Second user song')
+                other.locator('#llrc').fill('[00:00]Second user lyrics')
+                other.locator('#add').click()
+                other.locator("#list [data-a='go']").click()
+                second_obs = second_viewer.new_page()
+                watch(second_obs)
+                second_obs.goto(other.locator('#obsurl').input_value())
+                second_obs.wait_for_function("() => document.querySelector('#current').textContent === 'Second user lyrics'")
+                assert obs.locator('#current').inner_text() == 'Browser smoke test'
+                own_url, own_link = other.url, other.locator('#obsurl').input_value()
+                # Reopening another user's URL reuses the second user's existing room.
+                other.goto(page.url)
+                other.wait_for_function("() => document.querySelector('#relayStatus').textContent === 'OBS relay connected'")
+                assert other.url == own_url and other.locator('#obsurl').input_value() == own_link
+                other.locator("#list [data-a='go']").click()
+                second_obs.wait_for_function("() => document.querySelector('#current').textContent === 'Second user lyrics'")
                 exercise_controller(page, obs, origin)
                 # Verify the bundled visualizer and its nested iframe receive viewer authentication.
                 page.locator("#lfx").select_option("folia-classic")
@@ -95,16 +120,16 @@ def main():
                 obs.wait_for_function("() => document.querySelector('#current').textContent === 'Browser smoke test'")
                 token = new_link.split("#view=")[1]
                 assert not any(token in url for url in urls), "Viewer token leaked into an HTTP URL."
-                assert viewer.cookies() == [], "Viewer must not need operator cookies."
-                page.locator("#logout").click()
-                page.wait_for_url("**/manokara-login.html")
-                # Existing viewers keep working after the operator signs out.
+                assert viewer.cookies() == [] and second_viewer.cookies() == [], "OBS viewers must not need cookies."
+                assert second_obs.locator('#current').inner_text() == 'Second user lyrics'
+                # Closing one controller does not affect the other user's OBS output.
+                other.close()
                 obs.reload()
                 obs.wait_for_function("() => document.querySelector('#current').textContent === 'Browser smoke test'")
                 assert not errors, errors
                 assert not violations, violations
                 browser.close()
-            print("Browser smoke passed: login, live relay, Folia, JIZURA, token rotation, cookie-free OBS, logout, CSP.")
+            print("Browser smoke passed: public access, simultaneous users and OBS viewers, room reuse, live relay, Folia, JIZURA, token rotation, cookie-free OBS, CSP.")
         except Exception:
             print("Browser errors:", errors)
             print("CSP violations:", violations)

@@ -6,19 +6,28 @@ window.ManokaraSession = (() => {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify(payload), credentials: "same-origin", signal: AbortSignal.timeout(8000), ...options,
     });
-    if (response.status === 401) {
-      const room = new URL(location.href).searchParams.get("room");
-      location.replace("/manokara-login.html" + (/^[a-f0-9]{32}$/.test(room || "") ? "?room=" + room : ""));
-    }
     return response;
   };
-  const ready = (async () => {
+  const initialize = async () => {
     const url = new URL(location.href);
+    const session = await api("/__session", {});
+    if (!session.ok) {
+      const data = await session.json();
+      throw new Error(data.error || "Could not open your browser session.");
+    }
     let room = url.searchParams.get("room");
     try { room ||= localStorage.getItem("manokaraRelayRoom"); } catch (_) {}
     if (!/^[a-f0-9]{32}$/.test(room || "")) room = null;
     let response = await api("/__room", {room});
-    if (response.status === 404) response = await api("/__room", {room: null});
+    if (response.status === 404) {
+      // A shared controller URL must never grant access to somebody else's room.
+      let saved;
+      try { saved = localStorage.getItem("manokaraRelayRoom"); } catch (_) {}
+      if (saved !== room && /^[a-f0-9]{32}$/.test(saved || "")) {
+        response = await api("/__room", {room: saved});
+      }
+      if (response.status === 404) response = await api("/__room", {room: null});
+    }
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Could not open a room.");
     info = data;
@@ -27,7 +36,11 @@ window.ManokaraSession = (() => {
     url.hash = "";
     history.replaceState(history.state, "", url);
     return info;
-  })();
+  };
+  // Serialize first visits in separate tabs so they share one browser identity.
+  const ready = navigator.locks
+    ? navigator.locks.request("manokara-room", initialize)
+    : initialize();
   // The controller displays the error; mark the shared promise handled until it subscribes.
   ready.catch(() => {});
   const obsUrl = popup => {

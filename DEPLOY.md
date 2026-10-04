@@ -10,12 +10,22 @@ From your project folder on the VPS:
 cd "$HOME/manokara"
 python -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python outputs/manokara_server.py hash-password
 ```
 
-Use Python 3.12 or newer. The last command asks for your operator password (at least 10 characters) and prints a hash. Copy its complete output, including the `scrypt:` prefix.
+Use Python 3.12 or newer. The app is public and requires no password or account.
 
-Edit `start-manokara.sh` and paste that hash into `MANOKARA_PASSWORD_HASH`. The hostname is already set to `https://mano.del4yowo.id.vn`; change it if needed. If your checkout is somewhere other than `$HOME/manokara`, change the two paths in the last line.
+The hostname in `start-manokara.sh` is already set to `https://mano.del4yowo.id.vn`; change it if needed. If your checkout is somewhere other than `$HOME/manokara`, change the two paths in the last line. The complete script is:
+
+```sh
+#!/bin/sh
+export MANOKARA_ORIGIN="https://mano.del4yowo.id.vn"
+export MANOKARA_DATA_DIR="$HOME/.local/state/manokara"
+
+umask 077
+exec "$HOME/manokara/.venv/bin/python" "$HOME/manokara/outputs/manokara_server.py"
+```
+
+Start it with:
 
 ```sh
 chmod 700 start-manokara.sh
@@ -48,23 +58,29 @@ A local check is:
 curl --fail -H 'Host: mano.del4yowo.id.vn' http://127.0.0.1:8000/healthz
 ```
 
-Open `https://mano.del4yowo.id.vn`, sign in with your operator password, and copy the OBS URL into an OBS Browser Source. OBS links grant read-only access; "Replace OBS link" revokes the old link. OBS does not need your operator login cookie.
+Open `https://mano.del4yowo.id.vn` and copy the OBS URL into an OBS Browser Source. A private room opens automatically. OBS links grant read-only access; "Replace OBS link" revokes the old link. OBS does not need cookies.
 
-Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocket Loader, which can break the script hashes in the content security policy. Leave HTML and relay responses uncached. If you use Cloudflare Access, allow the OBS page, its assets, and `/__lyric-state` to load without an interactive login; the app still validates viewer tokens and operator sessions.
+Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocket Loader, which can break the script hashes in the content security policy. Leave HTML and relay responses uncached. Any tunnel access rules must let visitors load the public app and let OBS load its page, assets, and `/__lyric-state` without an interactive login.
 
 ## Runtime behavior
 
-One trusted operator password is shared by signed-in controllers. Browser rooms are separate; clicking a controller claims its room. Operator sessions last 12 hours, and changing the password hash then restarting revokes existing operator sessions. OBS links remain valid until rotated or their room is deleted.
+Each browser profile receives an automatic Secure, HttpOnly control cookie. It can control only the rooms it created; visiting someone else's controller URL opens your own room instead. Cookies must be enabled. Tabs in the same profile reuse its room; clicking a controller tab takes control of that room. Separate profiles, private windows, or devices receive separate rooms.
+
+Different users can use OBS simultaneously with different songs. Each user copies their own OBS link from the app. Multiple OBS instances using the same link show the same room. Sharing an OBS link shares viewing access only; it never shares control.
+
+Browser credentials last 30 days and renew when you open the app. Expired credentials and their rooms are cleaned up automatically; OBS links expire with their room. Clearing the control cookie or using a new browser creates a new room, and you must copy its new OBS link. There are no accounts or room recovery passwords. Allocation is rate limited and bounded to 128 rooms total, 8 per browser, and 1024 browser credentials to keep storage and memory bounded.
+
+When upgrading from the operator-password version, the server migrates the database and discards the old shared-operator rooms and sessions. Browser setlists and preferences stay intact. Reload the app and replace existing OBS links with the new ones. Remove any old `MANOKARA_PASSWORD_HASH` line from your own start script; password generation and login have been removed.
 
 Setlists and preferences stay in the browser. Room identities, viewer-token versions, and unexpired sessions survive restarts in the state database. Live playback resets after a restart and an open controller publishes it again. Run one Python process; the script does not supervise or restart it.
 
 The output and Folia share one clock and one relay reader. Clock samples use server-reported age, so controller and OBS devices can have different wall clocks. A disconnected clock extrapolates for at most 15 seconds. Keep the OBS Browser Source active to avoid background shutdown.
 
-The controller/login CSP prohibits dynamic JavaScript evaluation. Folia's viewer document has a scoped `unsafe-eval` exception for Pixi's shader/uniform compilation. Public hashed Folia assets use immutable caching; HTML, credentials, and relay state remain `no-store`. Access logs are disabled.
+The controller CSP prohibits dynamic JavaScript evaluation. Folia's viewer document has a scoped `unsafe-eval` exception for Pixi's shader/uniform compilation. Public hashed Folia assets use immutable caching; HTML, credentials, and relay state remain `no-store`. Access logs are disabled.
 
 ## Updates and tests
 
-Stop the server, update the project and install its requirements, then run your start script again. Keep your configured script and state directory when updating; do not commit your password hash. Back up the state directory with the server stopped. Restart after editing HTML so CSP hashes are recomputed.
+Stop the server, update the project and install its requirements, then run your start script again. Keep your configured script and state directory when updating. Back up the state directory with the server stopped. Restart after editing HTML so CSP hashes are recomputed.
 
 ```sh
 .venv/bin/python -m pip install -r requirements-dev.txt
@@ -86,6 +102,6 @@ For local HTTP development only, set `MANOKARA_ORIGIN=http://localhost:8000` and
 
 ## Source and notices
 
-The public `/sources/` URLs deliberately expose the bundled Folia source archive, its integration source, and third-party licenses/notices. Links are available from the login and controller pages. Keep them when deploying updates. Arbitrary directories, Python source, dotfiles, and symlinked files are not served. See the bundled Folia notice for upstream licensing and usage terms.
+The public `/sources/` URLs deliberately expose the bundled Folia source archive, its integration source, and third-party licenses/notices. Links are available from the controller page. Keep them when deploying updates. Arbitrary directories, Python source, dotfiles, and symlinked files are not served. See the bundled Folia notice for upstream licensing and usage terms.
 
 To rebuild Folia, unpack the provided upstream source archive, copy `manokara-folia.tsx` and `manokara-folia.css` from `outputs/FOLIA-INTEGRATION-SOURCE` into `src/`, copy its HTML and Vite configuration into the upstream root, and copy `ObsWebSourceApp.tsx` into `src/components/obs/`. The shared `manokara-core.js` must be available in Vite's public directory. Install the upstream locked dependencies and run Vite with `vite.manokara.config.mts`. Copy the resulting `folia-assets` and generated module/preload/stylesheet tags into the output entry page, retaining its authenticated source bootstrap and shared-core script. Deploy the integration source alongside the generated bundles.
