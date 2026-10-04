@@ -48,6 +48,9 @@ header{flex:0 0 32px}#grid{display:grid;grid-template-columns:minmax(220px,270px
 .modal-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:16px;background:#0009}
 .modal-card{width:min(560px,100%);max-height:min(90vh,720px);overflow:auto;padding:20px;border:1px solid var(--mu);border-radius:14px;background:var(--card);box-shadow:0 24px 80px #0008}
 .modal-card h2{margin:0 0 8px;font-size:20px}.modal-card p{margin:8px 0;color:var(--mu)}.modal-card ol{padding-left:22px;list-style:decimal}.modal-card li{display:list-item;padding:4px 0}.modal-card .row{margin-top:14px}
+#lyricDraft{border:1px dashed transparent;border-radius:8px;padding:2px}#lyricDraft.dragging{border-color:var(--ac);background:color-mix(in srgb,var(--ac) 12%,transparent)}
+#lyricsStatus{display:block;margin:5px 0;font-size:12px;overflow-wrap:anywhere}#lyricsStatus.error{color:#ef4444}
+#romajiDetails{margin-top:6px}#romajiDetails summary{cursor:pointer;color:var(--mu)}#romajiDetails textarea{height:110px!important}.ln .romanized{display:block;font-size:.82em;opacity:.85;margin-top:2px}
 @media(max-width:1100px){body{padding:6px}#grid{grid-template-columns:minmax(190px,230px) minmax(0,1fr) minmax(190px,230px);gap:6px}#stage{max-height:48vh}}
 @media(max-width:760px){html,body{height:auto;min-height:100%;overflow:auto}body{display:block}#grid{display:flex;flex-direction:column}#setlistSide{height:32vh;min-height:180px;margin:6px 0}#maincol{display:block}#player{margin:6px 0}#workspace{min-height:48vh;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}#side{height:40vh;min-height:220px;margin:6px 0}}
 @media(max-width:640px){#workspace{grid-template-columns:minmax(0,1fr)}header{gap:8px;flex-wrap:wrap}.row>input{min-width:0!important}#stage{max-height:none}#setlistSide{height:25vh}}
@@ -69,9 +72,13 @@ footer{flex:none;font-size:11px;padding:3px 8px!important}
 <div class="card"><b id="ftitle">➕ Add song (karaoke + lyrics)</b>
 <div class="row"><input id="url" placeholder="Karaoke YouTube URL" style="flex:2;min-width:200px"><input id="ttl" maxlength="512" placeholder="Title" style="flex:1;min-width:140px"></div>
 <div class="row"><label class="mu">Start <input id="st" placeholder="00:00" style="width:80px"></label><label class="mu">End <input id="en" placeholder="auto-next" style="width:90px"></label><small>End is optional; without it press Next.</small></div>
-<div class="row"><input id="lq" placeholder="Search lyrics: song / artist" style="flex:1;min-width:180px"><button id="lsearch">🔍 Search LRCLIB</button></div>
+<div class="row"><input id="lq" aria-label="Search lyrics" placeholder="Search lyrics: song / artist" style="flex:1;min-width:180px"><button id="lsearch">🔍 Search LRCLIB</button><button class="s" id="lyricsify" title="Search Lyricsify in a new browser tab">Lyricsify ↗</button></div>
 <ol id="lres"></ol>
-<textarea id="llrc" maxlength="200000" placeholder="[00:12.00]Lyrics line… (picked from LRCLIB, or paste your own)"></textarea>
+<div id="lyricDraft"><div class="row"><button class="s" id="importLrc">Import LRC</button><input id="lrcFile" type="file" accept=".lrc" hidden><label class="mu">Encoding <select id="lrcEncoding"><option value="auto">Auto (UTF-8 / Shift_JIS)</option><option value="utf-8">UTF-8</option><option value="shift_jis">Shift_JIS</option><option value="utf-16le">UTF-16LE</option></select></label></div>
+<textarea id="llrc" aria-label="Original lyrics LRC" maxlength="200000" placeholder="[00:12.00]Lyrics line… (search, paste, or drop an .lrc file here)"></textarea>
+<div class="row"><button class="s" id="romanize">Create Romaji</button><label class="mu">Show <select id="lyricMode"><option value="original">Original</option><option value="romaji" disabled>Romaji</option><option value="both" disabled>Japanese + Romaji</option></select></label></div>
+<details id="romajiDetails"><summary>Review / edit Romaji</summary><small>Edit readings only. Keep timestamps, metadata and blank lines unchanged. In dual mode, the original carries the effect and Romaji appears as a smaller synchronized caption.</small><textarea id="romajiLrc" aria-label="Romaji lyrics LRC" maxlength="200000" spellcheck="false"></textarea><button class="s" id="exportRomaji">Download Romaji LRC</button></details>
+<small id="lyricsStatus" role="status" aria-live="polite"></small></div>
 <div class="row"><label class="mu">Offset (s) <input type="number" id="loff" step="0.1" value="0" style="width:80px"></label><button id="add">+ Add song</button><button class="s" id="cancel" hidden>Cancel edit</button></div>
 <div class="row mu">MC break: <input id="mcm" maxlength="4096" placeholder="Memo" style="flex:1"><input id="mcd" placeholder="00:30" style="width:70px"><button class="s" id="addmc">+ Add MC</button></div></div>
 </div>
@@ -90,6 +97,8 @@ footer{flex:none;font-size:11px;padding:3px 8px!important}
 <div id="pan" class="mu">Play a song to see its lyrics.</div><small class="mu" id="pinfo"></small></aside></div>
 
 <script src="./manokara-core.js"></script>
+<script src="./manokara-lyrics.js"></script>
+<script src="./manokara-lyrics-editor.js"></script>
 <script src="./manokara-session.js"></script>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -101,8 +110,9 @@ try{const saved=JSON.parse(localStorage.getItem('kpt2')||'[]');if(Array.isArray(
  return {...it,title:String(it.title||it.url||'').slice(0,512),memo:String(it.memo||'').slice(0,4096),lrc:String(it.lrc||''),s:Math.max(0,number(it.s)),e:it.e==null?null:number(it.e,null),off:number(it.off),dur:it.dur==null?null:number(it.dur,null)};
 })}catch(e){}
 let timelineVersion=Date.now();
-const save=()=>{try{localStorage.setItem('kpt2',JSON.stringify(items,(k,v)=>k==='_L'?undefined:v))}catch(e){}};
+const save=()=>{try{localStorage.setItem('kpt2',JSON.stringify(items,(k,v)=>k==='_L'?undefined:v));return true}catch(e){msg('Browser storage is full or unavailable. Changes remain in this window only.');return false}};
 const msg=t=>$('#msg').textContent=t||'';
+const lyricEditor=ManokaraLyricsEditor.create({imported(metadata){pickDur=metadata.duration;if(!$('#ttl').value&&metadata.title)$('#ttl').value=metadata.title.slice(0,512);if(!$('#lq').value)$('#lq').value=[metadata.title,metadata.artist].filter(Boolean).join(' ')},changed(){pickDur=undefined}});
 const relayPageId=(()=>{try{return crypto.randomUUID()}catch(e){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}})();
 let relayRoom='',relayInitialized=false;
 const relayReady=window.ManokaraSession.ready.then(info=>{relayRoom=info.room;relayInitialized=true;$('#obsurl').value=window.ManokaraSession.obsUrl(false);return info});
@@ -115,8 +125,8 @@ document.addEventListener('keydown',takeRelayOwnership,true);
 window.addEventListener('pagehide',()=>relayServerAction('release'));
 if(location.protocol==='file:')$('#warn').hidden=false;
 function lyricDuration(it){return it.e!=null?Math.max(0,it.e-(it.s||0)):(it.mediaDuration||it.ldur||180)}
-function getL(it){const D=lyricDuration(it),k=(it.lrc||'')+'|'+D;if(it._L&&it._L.k===k)return it._L.a;
- const parsed=ManokaraCore.parseLyrics(it.lrc,D);it._L={k,a:parsed.lines,all:parsed.all,timed:parsed.timed};return parsed.lines}
+function getL(it){const D=lyricDuration(it),raw=ManokaraLyrics.displayLrc(it),secondary=ManokaraLyrics.secondaryLrc(it),k=raw+'|'+secondary+'|'+D;if(it._L&&it._L.k===k)return it._L.a;
+ const parsed=ManokaraCore.parseLyrics(raw,D);if(secondary){const second=ManokaraCore.parseLyrics(secondary,D).all;parsed.all.forEach((line,i)=>line.romaji=second[i]?.x!==line.x?second[i]?.x||'':'')}it._L={k,a:parsed.lines,all:parsed.all,timed:parsed.timed};return parsed.lines}
 const yid=ManokaraCore.youtubeId;
 const idx=()=>ci?items.indexOf(ci):-1;
 const nxt=()=>{if(!ci)return 0;const k=idx();return k>=0?k+1:pos};
@@ -172,15 +182,17 @@ function elapsed(){const it=ci;if(!it||counting)return 0;
  return clkEl()}
 function render(){showOff();$('#list').innerHTML=items.map((it,i)=>'<li class="'+(it===ci?'on':'')+'" data-i="'+i+'"><span class="t" data-a="go">'+(i+1)+'. '+(it.mc?'🎙 MC '+esc(it.memo||''):esc(it.title)+(it.lrc?' ⏱':''))+'</span><small>'+(it.mc?(it.dur!=null?fmt(it.dur):''):(it.e!=null?fmt(it.e-(it.s||0)):''))+'</small>'+(it.mc?'':'<button class="s" data-a="ed">✎</button>')+'<button class="s" data-a="up">▲</button><button class="s" data-a="dn">▼</button><button class="s" data-a="del">✕</button></li>').join('')||'<small>No songs yet. Add one below.</small>'}
 $('#list').onclick=e=>{const b=e.target.closest('[data-a]');if(!b)return;const i=+b.closest('li').dataset.i,a=b.dataset.a;
- if(a==='go')go(i);else if(a==='ed'){edit=i;const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#lq').value=it.title;$('#add').textContent='✓ Save changes';$('#cancel').hidden=false;$('#ftitle').scrollIntoView()}
+ if(a==='go')go(i);else if(a==='ed'){edit=i;const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#lq').value=it.title;lyricEditor.load(it);$('#add').textContent='✓ Save changes';$('#cancel').hidden=false;$('#ftitle').scrollIntoView()}
  else{const editing=edit>=0?items[edit]:null,c=ci,k0=c?items.indexOf(c):-1,w=k0>=0?k0:pos;if(a==='del')items.splice(i,1);else{const j=a==='up'?i-1:i+1;if(j>=0&&j<items.length)[items[i],items[j]]=[items[j],items[i]]}
   if(editing){const newEdit=items.indexOf(editing);if(newEdit<0)reset();else edit=newEdit}if(c){const k=items.indexOf(c);if(k>=0)pos=k;else{if(k0>=0){pos=w;msg('Removed from the setlist. The current song keeps playing until it ends or you press Stop.')}else if(a==='del'&&i<pos)pos--}}save();render()}};
-function reset(){edit=-1;pickDur=undefined;['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');$('#loff').value=0;$('#add').textContent='+ Add song';$('#cancel').hidden=true;$('#lres').innerHTML=''}
+function reset(){edit=-1;pickDur=undefined;['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');lyricEditor.reset();$('#loff').value=0;$('#add').textContent='+ Add song';$('#cancel').hidden=true;$('#lres').innerHTML=''}
 $('#cancel').onclick=reset;
 $('#add').onclick=()=>{const u=$('#url').value.trim();if(!/^https?:\/\//.test(u)){msg('Paste a karaoke URL first.');return}
  const start=tp($('#st').value),end=tp($('#en').value);if(Number.isNaN(start)||Number.isNaN(end)||end!=null&&end<=(start||0)){msg('Use valid times (mm:ss or seconds); End must be after Start.');return}if(new TextEncoder().encode(JSON.stringify($('#llrc').value)).length>230000){msg('Lyrics are too long for the relay (maximum 230 KB).');return}
- const it={title:($('#ttl').value.trim()||u).slice(0,512),url:u,s:start||0,e:end,lrc:$('#llrc').value,ldur:pickDur??(edit>=0?items[edit].ldur:undefined),off:+$('#loff').value||0};
- if(edit>=0){const existing=items[edit],reloadCurrent=existing===ci&&(existing.url!==it.url||existing.s!==it.s||existing.e!==it.e);Object.assign(existing,it);delete existing._L;if(existing===ci){dur=it.e!=null?it.e-it.s:null;timelineVersion++;$('#now').textContent=it.title;if(reloadCurrent)go(edit)}}else items.push(it);reset();save();render();msg('Saved.')};
+ let lyricDraft;try{lyricDraft=lyricEditor.read()}catch(error){msg(error.message);return}
+ const it={title:($('#ttl').value.trim()||u).slice(0,512),url:u,s:start||0,e:end,lrc:$('#llrc').value,...lyricDraft,ldur:pickDur??(edit>=0?items[edit].ldur:undefined),off:+$('#loff').value||0};
+ const lyricBytes=new TextEncoder().encode(JSON.stringify({lrc:ManokaraLyrics.displayLrc(it),romajiLrc:ManokaraLyrics.secondaryLrc(it)})).length;if(lyricBytes>230000){msg('Combined output lyrics exceed 230 KB. Shorten the LRC or choose a single display language.');return}
+ if(edit>=0){const existing=items[edit],reloadCurrent=existing===ci&&(existing.url!==it.url||existing.s!==it.s||existing.e!==it.e);Object.assign(existing,it);delete existing._L;if(existing===ci){dur=it.e!=null?it.e-it.s:null;timelineVersion++;$('#now').textContent=it.title;if(reloadCurrent)go(edit)}}else items.push(it);reset();const persisted=save();render();msg(persisted?'Saved.':'Browser storage is full or unavailable. Changes remain in this window only.')};
 $('#addmc').onclick=()=>{const duration=tp($('#mcd').value);if(!Number.isFinite(duration)||duration<=0){msg('Enter a positive MC duration (mm:ss or seconds).');return}items.push({mc:1,memo:$('#mcm').value,dur:duration});$('#mcm').value=$('#mcd').value='';save();render()};
 $('#clr').onclick=()=>{if(confirm('Remove all songs?')){items=[];pos=0;last=-1;reset();save();render();if(ci)msg('Setlist cleared. The current song keeps playing until it ends or you press Stop.')}};
 $('#url').onchange=async()=>{const u=$('#url').value.trim();if(!yid(u)||$('#ttl').value)return;
@@ -189,7 +201,7 @@ $('#lsearch').onclick=async()=>{const q=$('#lq').value.trim()||$('#ttl').value.t
  try{res=(await(await fetch('https://lrclib.net/api/search?q='+encodeURIComponent(q))).json()).sort((a,b)=>!!b.syncedLyrics-!!a.syncedLyrics);
   $('#lres').innerHTML=res.slice(0,10).map((x,i)=>'<li data-i="'+i+'"><span>'+esc(x.trackName+' — '+x.artistName)+(x.syncedLyrics?' ⏱ synced':' 📄 plain only')+'</span><small>'+fmt(x.duration||0)+'</small></li>').join('')||'No results.'}
  catch(e){$('#lres').textContent='Search failed. Check your connection.'}};
-$('#lres').onclick=e=>{const li=e.target.closest('li');if(li){const x=res[+li.dataset.i];$('#llrc').value=x.syncedLyrics||x.plainLyrics||'';pickDur=x.duration;msg(x.syncedLyrics?'Synced lyrics picked. Press Add/Save to keep them.':'Plain text only: it will scroll roughly evenly. During playback press T to time each line.')}};
+$('#lres').onclick=e=>{const li=e.target.closest('li');if(li){const x=res[+li.dataset.i];$('#llrc').value=x.syncedLyrics||x.plainLyrics||'';lyricEditor.sourceReplaced();pickDur=x.duration;msg(x.syncedLyrics?'Synced lyrics picked. Press Add/Save to keep them.':'Plain text only: it will scroll roughly evenly. During playback press T to time each line.')}};
 /* player controls */
 function togglePause(){if(!ci)return;takeRelayOwnership();const it=ci;
  if(counting){setPauseUI(!paused);return}
@@ -255,7 +267,7 @@ async function publishObsState(){
  const googleFont=effect==='jizura'?'':(custom||fontDef[2]||'');
  const playing=mediaPlaying();
  const rawTime=!counting&&it&&!it.mc?elapsed():0,time=rawTime+(it&&!it.mc&&!counting?(it.off||0):0);
- const snapshot={writerId:relayPageId,ready:true,title:it&&!it.mc?it.title:'',lrc:it&&!it.mc?it.lrc||'':'',time,sampledAt:Date.now(),timelineVersion,playing,paused:!!paused,counting:!!counting,countdownRemaining:remaining,duration:it&&!it.mc?lyricDuration(it):0,mc:!!(it&&it.mc),memo:it&&it.mc?it.memo||'':'',size:+$('#lsz').value||64,foreground:$('#lcol').value,themeSeed,background:$('#lbgmode').value==='green'?'#00ff00':'transparent',transparent:$('#lbgmode').value!=='green',bold:$('#lbold').checked,font,googleFont,effect,centerFree:$('#lcenter').checked,centerShape:$('#lshape').value,colorTheme:$('#ltheme').value};
+ const snapshot={writerId:relayPageId,ready:true,title:it&&!it.mc?it.title:'',lrc:it&&!it.mc?ManokaraLyrics.displayLrc(it):'',romajiLrc:it&&!it.mc?ManokaraLyrics.secondaryLrc(it):'',time,sampledAt:Date.now(),timelineVersion,playing,paused:!!paused,counting:!!counting,countdownRemaining:remaining,duration:it&&!it.mc?lyricDuration(it):0,mc:!!(it&&it.mc),memo:it&&it.mc?it.memo||'':'',size:+$('#lsz').value||64,foreground:$('#lcol').value,themeSeed,background:$('#lbgmode').value==='green'?'#00ff00':'transparent',transparent:$('#lbgmode').value!=='green',bold:$('#lbold').checked,font,googleFont,effect,centerFree:$('#lcenter').checked,centerShape:$('#lshape').value,colorTheme:$('#ltheme').value};
  const r=await window.ManokaraSession.api(relayUrl('/__lyric-state'),snapshot);if(r.status===409){if(relayUp!=='inactive')setRelayStatus(true,false);relayUp='inactive';return}if(!r.ok)throw Error('relay unavailable');await r.json();if(relayUp!==true)setRelayStatus(true);relayUp=true
  }
  catch(e){if(relayUp!==false)setRelayStatus(false);relayUp=false}
@@ -273,15 +285,15 @@ function fsz(d){fs=Math.min(40,Math.max(11,fs+d));P.style.setProperty('--ps',fs+
 $('#fm').onclick=()=>fsz(-2);$('#fp').onclick=()=>fsz(2);
 function updPan(){const it=ci;if(!it||it.mc||!it.lrc){if(pk!=='-'){P.textContent=it&&!it.mc?'No lyrics for this song.':'Play a song to see its lyrics.';$('#pinfo').textContent='';pk='-'}return}
  const L=getL(it),k=it._L.k;
- if(k!==pk){pk=k;panelActive=-2;P.scrollTop=0;P.innerHTML=it._L.all.map(q=>'<div class="ln">'+esc(q.x||'♪')+'</div>').join('');$('#pinfo').textContent=it._L.timed?'':'Plain text: scrolling is approximate. Press T on each line to time it.'}
+ if(k!==pk){pk=k;panelActive=-2;P.scrollTop=0;P.innerHTML=it._L.all.map(q=>'<div class="ln">'+esc(q.x||'♪')+(q.romaji?'<span class="romanized">'+esc(q.romaji)+'</span>':'')+'</div>').join('');$('#pinfo').textContent=it._L.timed?'':'Plain text: scrolling is approximate. Press T on each line to time it.'}
  const t=counting?-1:elapsed()+(it.off||0);let a=null;for(const q of L){if(q.t<=t)a=q;else break}
  const idx2=a?it._L.all.indexOf(a):-1;if(idx2===panelActive)return;panelActive=idx2;[...P.children].forEach((e,i)=>e.classList.toggle('cl',i===idx2));
  const e=P.children[idx2];if(e)P.scrollTop=e.offsetTop-P.clientHeight/2+e.clientHeight/2}
 setInterval(updPan,150);
 function tap(){const it=ci;if(!it||it.mc||!it.lrc){msg('Play a song with lyrics first.');return}
  const raw=it.lrc.split(/\r?\n/),i=raw.findIndex(l=>l.replace(/\[[^\]]*\]/g,'').trim()&&!/^\s*\[\d+:\d{2}/.test(l));if(i<0){msg('All lines already have times.');return}
- const t=Math.max(0,elapsed()+(it.off||0));raw[i]='['+String(Math.floor(t/60)).padStart(2,'0')+':'+(t%60).toFixed(2).padStart(5,'0')+']'+raw[i].trim();it.lrc=raw.join('\n');save();msg('Timed line '+(i+1)+'.')}
+ const t=Math.max(0,elapsed()+(it.off||0)),stamp='['+String(Math.floor(t/60)).padStart(2,'0')+':'+(t%60).toFixed(2).padStart(5,'0')+']';const romanized=ManokaraLyrics.validRomaji(it)?it.romaji.lrc.split(/\r?\n/):null;raw[i]=stamp+raw[i].trim();it.lrc=raw.join('\n');if(romanized){romanized[i]=stamp+romanized[i].trim();it.romaji={source:it.lrc,lrc:romanized.join('\n')}}timelineVersion++;save();msg('Timed line '+(i+1)+'.')}
 $('#tap').onclick=tap;
 document.addEventListener('keydown',e=>{if(/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey)return;if(e.key==='t'||e.key==='T')tap()});
 render();
-</script><footer class="mu" style="padding:16px"><a href="/sources/FOLIA-MAJOR-NOTICE.txt">Folia notices</a> | <a href="/sources/FOLIA-MAJOR-SOURCE.zip">Folia source</a> | <a href="/sources/FOLIA-INTEGRATION-SOURCE/manokara-folia.tsx">Integration source</a> | <a href="/sources/JIZURA-LICENSE.txt">JIZURA license</a></footer></body></html>
+</script><footer class="mu" style="padding:16px"><a href="/sources/FOLIA-MAJOR-NOTICE.txt">Folia notices</a> | <a href="/sources/FOLIA-MAJOR-SOURCE.zip">Folia source</a> | <a href="/sources/FOLIA-INTEGRATION-SOURCE/manokara-folia.tsx">Integration source</a> | <a href="/sources/JIZURA-LICENSE.txt">JIZURA license</a> | <a href="/romaji-assets/NOTICES.txt">Romaji notices</a></footer></body></html>

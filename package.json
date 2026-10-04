@@ -1,0 +1,13 @@
+{
+  "name": "manokara",
+  "private": true,
+  "scripts": {
+    "build:romaji": "node scripts/build-romaji.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "kuroshiro": "1.2.0",
+    "kuroshiro-analyzer-kuromoji": "1.1.0",
+    "path-browserify": "1.0.1"
+  }
+}

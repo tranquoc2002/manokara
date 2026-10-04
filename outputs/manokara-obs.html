@@ -26,9 +26,15 @@ body[data-jizura="on"] #out{display:none}
 #foliaFrame{position:fixed;inset:0;z-index:3;width:100vw;height:100vh;border:0;display:none;background:transparent}
 body[data-folia="on"] #out,body[data-folia="on"] #jizuraCanvas{display:none!important}
 body[data-folia="on"] #foliaFrame{display:block}
+#romajiCaption{position:fixed;z-index:30;left:6vw;bottom:5vh;width:88vw;max-width:88vw;pointer-events:none;text-align:center;overflow-wrap:anywhere;line-height:1.3;font-weight:600;text-shadow:0 1px 4px #000,0 0 8px #000}
+#romajiCaption[hidden]{display:none!important}
+body[data-center-free="on"][data-center-shape="wide"] #romajiCaption{width:32vw;max-width:32vw;bottom:6vh;left:2vw}
+body[data-center-free="on"][data-center-shape="wide"] #romajiCaption[data-zone="right"]{left:auto;right:2vw}
+body[data-center-free="on"][data-center-shape="tall"] #romajiCaption{left:4vw;width:92vw;max-width:92vw;bottom:5vh}
+body[data-center-free="on"][data-center-shape="tall"] #romajiCaption[data-zone="top"]{bottom:auto;top:24vh}
 </style>
 </head>
-<body><main id="out"><div id="previous"></div><div id="current"></div><div id="count"></div></main><canvas id="jizuraCanvas"></canvas><iframe id="foliaFrame" title="Folia lyric visualizer" allow="autoplay"></iframe>
+<body><main id="out"><div id="previous"></div><div id="current"></div><div id="count"></div></main><canvas id="jizuraCanvas"></canvas><iframe id="foliaFrame" title="Folia lyric visualizer" allow="autoplay"></iframe><div id="romajiCaption" hidden></div>
 <script src="./manokara-core.js"></script>
 <script src="./manokara-effects.js?v=2"></script>
 <script src="./manokara-jizura.js?v=full"></script>
@@ -43,7 +49,7 @@ const relayViewToken=new URLSearchParams(location.hash.slice(1)).get('view')||''
 window.addEventListener('hashchange',()=>location.reload());
 const relayStateUrl=()=>{const url=new URL('/__lyric-state',location.href);if(relayRoom)url.searchParams.set('room',relayRoom);return url.href};
 const clock=ManokaraCore.createClock(),subscribers=new Set();
-let state=null,parsedKey='',lines=[],lastTextKey='',pollPending=false;
+let state=null,parsedKey='',lines=[],secondaryLines=[],lastTextKey='',pollPending=false,captionKey='';
 window.ManokaraOutput={room:relayRoom,time:()=>clock.time(),getSnapshot:()=>state,subscribe(fn){subscribers.add(fn);if(state)fn(state);return()=>subscribers.delete(fn)}};
 function notify(){for(const fn of subscribers)fn(state)}
 function googleFontHref(value){
@@ -61,14 +67,24 @@ function syncFont(s,doc=document){
 }
 function centerShape(s){const m=s.centerShape||'auto';return m==='auto'?(innerHeight>innerWidth*1.1?'tall':'wide'):m}
 function lineState(s){
- if(s.counting||s.mc||!s.title)return{current:'',previous:'',index:0};
- const key=(s.lrc||'')+'|'+s.duration;
- if(key!==parsedKey){parsedKey=key;lines=parseLyrics(s.lrc,s.duration)}
+ if(s.counting||s.mc||!s.title)return{current:'',previous:'',romaji:'',index:0};
+ const key=(s.lrc||'')+'|'+(s.romajiLrc||'')+'|'+s.duration;
+ if(key!==parsedKey){parsedKey=key;lines=parseLyrics(s.lrc,s.duration);secondaryLines=s.romajiLrc?parseLyrics(s.romajiLrc,s.duration):[]}
  const t=clock.time();
  let i=-1;for(let j=0;j<lines.length&&lines[j].t<=t;j++)i=j;
- return{current:i>=0?lines[i].x:'',previous:i>0?lines[i-1].x:'',index:Math.max(0,i)}
+ return{current:i>=0?lines[i].x:'',previous:i>0?lines[i-1].x:'',romaji:i>=0?secondaryLines[i]?.x||'':'',index:Math.max(0,i)}
 }
 function zoneFor(i,shape){return shape==='tall'?(i%2?'bottom':'top'):(i%2?'right':'left')}
+function syncRomajiCaption(s,ls,shape,zone){
+ const node=$('#romajiCaption'),text=ls.current&&ls.romaji!==ls.current?ls.romaji:'';
+ node.hidden=!text;node.dataset.zone=zone;
+ if(!text){captionKey='';return}
+ const key=[text,ls.index,s.size,s.centerFree,shape,innerWidth,innerHeight].join('|');if(key===captionKey)return;captionKey=key;
+ const width=s.centerFree&&shape==='wide'?innerWidth*.32:innerWidth*.88,height=s.centerFree&&shape==='tall'?innerHeight*.065:innerHeight*.14;
+ const font=Math.max(9,Math.min((Number(s.size)||64)*.48,48,Math.sqrt(width*height/(Math.max(1,[...text].length)*.8))));
+ node.style.fontSize=font.toFixed(2)+'px';
+ if(node.textContent!==text){node.textContent=text;node.getAnimations().forEach(a=>a.cancel());node.animate([{opacity:0},{opacity:1}],{duration:180,easing:'ease-out'})}
+}
 const foliaCenterTargets=[
  {effects:['classic','cadenza','partita','tilt'],selector:'#root div[class*="h-[70vh]"][class*="pointer-events-none"]'},
  {effects:['cappella'],selector:'#root div[class*="relative z-10 flex h-full w-full items-start justify-center"]'},
@@ -117,6 +133,7 @@ function render(){
  body.style.fontFamily=s.font||'system-ui,"Yu Gothic",sans-serif';body.style.fontWeight=s.bold===false?400:800;
  body.style.fontSize=Math.max(24,Math.min(160,Number(s.size)||64))+'px';
  syncFont(s);
+ syncRomajiCaption(s,ls,shape,activeZone);
  const foliaMode=effect.startsWith('folia-')&&!s.counting&&!s.mc&&!!s.title&&!!s.lrc;
  if(foliaMode){
   body.dataset.folia='on';jizuraCanvas.style.display='none';body.dataset.jizura='off';
@@ -144,7 +161,7 @@ function render(){
  if(textKey!==lastTextKey){currentNode.textContent=shown;window.ManokaraLyricFX.play(currentNode,shown,effect);lastTextKey=textKey}
 }
 function clearOutput(message=''){
- state=null;lastTextKey='';document.body.dataset.centerFree='off';$('#current').className='';$('#current').textContent=message;
+ state=null;lastTextKey='';captionKey='';$('#romajiCaption').hidden=true;$('#romajiCaption').textContent='';document.body.dataset.centerFree='off';$('#current').className='';$('#current').textContent=message;
  $('#previous').textContent='';$('#count').textContent='';document.body.dataset.folia='off';document.body.dataset.jizura='off';jizuraCanvas.style.display='none';
  for(const fn of subscribers)fn({ready:false});
 }

@@ -217,7 +217,7 @@ async def read_json(request, limit=MAX_BODY):
 
 
 def snapshot(payload):
-    strings = {"writerId": 128, "title": 512, "lrc": 200_000, "memo": 4096,
+    strings = {"writerId": 128, "title": 512, "lrc": 200_000, "romajiLrc": 200_000, "memo": 4096,
                "font": 256, "googleFont": 128, "foreground": 9, "background": 16,
                "effect": 32, "centerShape": 8, "colorTheme": 12}
     numbers = {"time": (-86400, 604800), "sampledAt": (0, 100_000_000_000_000),
@@ -252,8 +252,13 @@ def snapshot(payload):
 def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
-             "manokara-session.js", "manokara-core.js"]
+             "manokara-session.js", "manokara-core.js",
+             "manokara-lyrics.js", "manokara-lyrics-editor.js", "manokara-romaji-worker.js"]
     result = {"/" + name: ROOT / name for name in names}
+    # Only the converter, dictionary blobs and notices are served from this directory.
+    for file in (ROOT / "romaji-assets").rglob("*"):
+        if file.is_file() and file.suffix in (".js", ".gz", ".txt"):
+            result["/romaji-assets/" + file.relative_to(ROOT / "romaji-assets").as_posix()] = file
     for file in (ROOT / "folia-assets").iterdir():
         if file.suffix in (".js", ".css", ".png") and file.is_file():
             result["/folia-assets/" + file.name] = file
@@ -316,6 +321,10 @@ class SecurityHeaders:
                         and scope["path"] in self.manifest_urls):
                     # Public bundles are named by their content hash. Reuse them on mode changes.
                     headers[b"cache-control"] = b"public, max-age=31536000, immutable"
+                elif (message["status"] == 200 and scope["path"].startswith("/romaji-assets/")
+                      and scope["path"] in self.manifest_urls):
+                    # Versioned public dictionary files can be reused on later conversions.
+                    headers[b"cache-control"] = b"public, max-age=86400"
                 if self.settings.secure:
                     headers[b"strict-transport-security"] = b"max-age=31536000"
                 message["headers"] = list(headers.items())

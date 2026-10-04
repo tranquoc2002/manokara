@@ -98,7 +98,13 @@ For real-browser tests:
 
 These tests start/stop their own temporary local server. Set `MANOKARA_TEST_BROWSER` to an installed Chromium/Edge executable if preferred. Browser playback cases use a deterministic YouTube API fixture; they do not establish that any particular public video permits embedding.
 
+Node is used for shared-clock unit tests and optional Romaji asset rebuilds; production only runs Python. External font/media providers still need to be reachable for their functionality.
+
 For local HTTP development only, set `MANOKARA_ORIGIN=http://localhost:8000` and `MANOKARA_ALLOW_HTTP=1`, then invoke the Python entry point directly. Local HTTP is restricted to loopback hostnames. On Windows use `.venv\Scripts\python.exe` and PowerShell `$env:MANOKARA_*` assignments.
+
+Deploy the entire `outputs/romaji-assets/` directory along with the new lyric editor/worker scripts. The Japanese dictionary and converter are prebuilt (approximately 18 MB); no translation service or new Python dependency is required. They load only when **Create Romaji** is clicked and are cacheable public assets. Restart the Python server after updating so its asset allowlist includes the new files, reload the controller, and Refresh the OBS Browser Source. A new controller sends a `romajiLrc` field, so the old server must be updated even for Original mode.
+
+To rebuild Romaji assets from pinned dependencies, run `npm ci --ignore-scripts` and `npm run build:romaji` from the repository root. This is a developer step; normal deployment uses the committed bundle and dictionary. **Lyricsify ↗** opens external search and **Import LRC** reads the downloaded file locally; the backend does not scrape Lyricsify.
 
 ## Source and notices
 
