@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "outputs"))
 import manokara_server as backend
-from browser_cases import exercise_controller, exercise_server_fallback
+from browser_cases import exercise_controller, exercise_server_fallback, exercise_video_titles
 
 
 def main():
@@ -94,6 +94,7 @@ def main():
                 second_obs.wait_for_function("() => document.querySelector('#current').textContent === 'Second user lyrics'")
                 exercise_controller(page, obs, origin)
                 exercise_server_fallback(page, obs)
+                exercise_video_titles(page)
                 # Verify the bundled visualizer and its nested iframe receive viewer authentication.
                 page.locator("#lfx").select_option("folia-classic")
                 obs.wait_for_function("() => document.body.dataset.folia === 'on'")

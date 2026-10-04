@@ -523,6 +523,19 @@ def create_app(settings=None):
         result["url"] = f"/__youtube/media?room={room_id}&ticket={result.pop('ticket')}"
         return JSONResponse(result)
 
+    async def youtube_title(request):
+        digest = browser_session(request)
+        room_id = request.query_params.get("room")
+        store.room(room_id, digest)
+        limiter.check(("youtube-title", digest), 6 / 60, 6)
+        limiter.check("youtube-global", 1, 8)
+        payload = await read_json(request, 1024)
+        if set(payload) != {"videoId"}:
+            raise HTTPException(400, "Send only a YouTube video ID.")
+        result = await media_service.title(payload["videoId"])
+        store.room(room_id, digest)
+        return JSONResponse(result)
+
     async def youtube_media(request):
         digest = browser_session(request)
         room_id = request.query_params.get("room")
@@ -579,6 +592,7 @@ def create_app(settings=None):
         Route("/__lyric-owner", relay_owner, methods=["POST"]),
         Route("/__lyric-state", relay_state, methods=["GET", "POST"]),
         Route("/__youtube", youtube_lookup, methods=["POST"]),
+        Route("/__youtube/title", youtube_title, methods=["POST"]),
         Route("/__youtube/media", youtube_media, methods=["GET", "HEAD"]),
         Route("/healthz", health, methods=["GET"]), Route("/{path:path}", assets, methods=["GET", "HEAD"]),
     ], exception_handlers={HTTPException: http_error}, lifespan=lifespan)

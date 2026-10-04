@@ -90,11 +90,21 @@ def media_url(value):
     return url.hostname
 
 
-def select_formats(info, video_id):
-    duration = info.get("duration")
+def public_video(info, video_id):
     if (info.get("id") != video_id or info.get("_type", "video") != "video"
             or info.get("availability") not in ("public", "unlisted")
-            or info.get("age_limit", 0) != 0 or info.get("is_live") or info.get("has_drm")
+            or info.get("age_limit", 0) != 0 or info.get("has_drm")):
+        raise HTTPException(422, "This lookup supports public, unrestricted YouTube videos.")
+
+
+def clean_title(value):
+    return re.sub(r"[\x00-\x1f\x7f]", " ", value).strip()[:512] if isinstance(value, str) else ""
+
+
+def select_formats(info, video_id):
+    public_video(info, video_id)
+    duration = info.get("duration")
+    if (info.get("is_live")
             or info.get("live_status") in ("is_live", "is_upcoming", "post_live")
             or type(duration) not in (int, float) or not math.isfinite(duration) or not 0 < duration <= MAX_DURATION):
         raise HTTPException(422, "Streaming supports public, unrestricted, recorded YouTube videos up to two hours.")
@@ -182,7 +192,7 @@ class MediaService:
         finally:
             await self.stop(process)
 
-    async def resolve(self, video_id, room_id, digest):
+    async def lookup(self, video_id):
         if not self.settings.enabled:
             raise HTTPException(503, "Server playback is disabled. Open this video on YouTube.")
         if not isinstance(video_id, str) or not VIDEO_ID.fullmatch(video_id):
@@ -193,20 +203,32 @@ class MediaService:
             info = await self.capture(command(self.settings) + ["--skip-download", "--dump-single-json", "--", "https://www.youtube.com/watch?v=" + video_id])
             if not isinstance(info, dict):
                 raise HTTPException(502, "YouTube returned invalid metadata.")
-            metadata = select_formats(info, video_id)
-            for host in {media_url(f["url"]) for f in metadata["formats"]}:
-                try:
-                    addresses = await asyncio.wait_for(asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM), 5)
-                except (OSError, TimeoutError):
-                    raise HTTPException(502, "YouTube media address lookup failed.")
-                if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
-                    raise HTTPException(502, "YouTube returned a non-public media address.")
+            return info
+
+    async def title(self, video_id):
+        info = await self.lookup(video_id)
+        public_video(info, video_id)
+        title = clean_title(info.get("title"))
+        if not title:
+            raise HTTPException(502, "YouTube returned no video title.")
+        return {"title": title}
+
+    async def resolve(self, video_id, room_id, digest):
+        info = await self.lookup(video_id)
+        metadata = select_formats(info, video_id)
+        for host in {media_url(f["url"]) for f in metadata["formats"]}:
+            try:
+                addresses = await asyncio.wait_for(asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM), 5)
+            except (OSError, TimeoutError):
+                raise HTTPException(502, "YouTube media address lookup failed.")
+            if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
+                raise HTTPException(502, "YouTube returned a non-public media address.")
         self.tickets = {key: value for key, value in self.tickets.items() if value["expires"] > time.monotonic() and value["room"] != room_id}
         if len(self.tickets) >= 128:
             raise HTTPException(429, "Too many pending videos. Try again later.")
         ticket = secrets.token_hex(16)
         self.tickets[ticket] = {"room": room_id, "digest": digest, "metadata": metadata, "expires": time.monotonic() + 900}
-        return {"ticket": ticket, "duration": metadata["duration"]}
+        return {"ticket": ticket, "duration": metadata["duration"], "title": clean_title(info.get("title"))}
 
     def get_ticket(self, ticket, room_id, digest):
         entry = self.tickets.get(ticket)

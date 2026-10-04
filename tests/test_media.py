@@ -140,14 +140,15 @@ def test_http_stream_failures_reap_processes_and_release_capacity(failure):
     asyncio.run(run())
 
 
-def test_cookie_free_viewers_and_other_visitors_cannot_use_video_relay(tmp_path, monkeypatch):
+@pytest.mark.parametrize("path", ["/__youtube", "/__youtube/title"])
+def test_cookie_free_viewers_and_other_visitors_cannot_use_video_relay(tmp_path, monkeypatch, path):
     monkeypatch.setenv("MANOKARA_YTDLP_ENABLED", "0")
     app = backend.create_app(backend.Settings(ORIGIN, tmp_path))
     with TestClient(app, base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
-        assert client.post("/__youtube", json={"videoId": VIDEO}).status_code == 401
+        assert client.post(path, json={"videoId": VIDEO}).status_code == 401
         client.post("/__session", json={})
         room = client.post("/__room", json={}).json()
-        endpoint = "/__youtube?room=" + room["room"]
+        endpoint = path + "?room=" + room["room"]
         assert client.post(endpoint, json={"videoId": VIDEO}).status_code == 503
         assert client.post(endpoint, json={"videoId": VIDEO, "cookies": "secret"}).status_code == 400
         client.cookies.clear()
@@ -157,6 +158,45 @@ def test_cookie_free_viewers_and_other_visitors_cannot_use_video_relay(tmp_path,
         client.post("/__session", json={})
         assert client.post(endpoint, json={"videoId": VIDEO}).status_code == 404
         assert client.get("/__youtube/media?room=" + room["room"]).status_code == 404
+
+
+def test_title_lookup_does_not_require_playable_formats_or_replace_media_tickets(tmp_path, monkeypatch):
+    monkeypatch.setenv("MANOKARA_YTDLP_ENABLED", "0")
+    app = backend.create_app(backend.Settings(ORIGIN, tmp_path))
+    app.state.media.settings = media.MediaSettings(enabled=True)
+
+    async def capture(args):
+        assert "--skip-download" in args
+        return {"id": VIDEO, "availability": "public", "title": "  ROSÉ - On The Ground\n(Karaoke Version)  ",
+                "formats": [], "webpage_url": "https://youtube.com/", "http_headers": {"Cookie": "secret"}}
+
+    monkeypatch.setattr(app.state.media, "capture", capture)
+    with TestClient(app, base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
+        client.post("/__session", json={})
+        room = client.post("/__room", json={}).json()["room"]
+        app.state.media.tickets["existing"] = {"room": room, "expires": time.monotonic() + 60}
+        response = client.post(f"/__youtube/title?room={room}", json={"videoId": VIDEO})
+        assert response.status_code == 200
+        assert response.json() == {"title": "ROSÉ - On The Ground (Karaoke Version)"}
+        assert response.headers["cache-control"] == "no-store"
+        assert list(app.state.media.tickets) == ["existing"]
+        assert not app.state.media.processes and not app.state.media.active
+        assert client.post(f"/__youtube/title?room={room}", json={"videoId": "--exec evil"}).status_code == 400
+
+
+@pytest.mark.parametrize("changes", [{"availability": "private"}, {"age_limit": 18}, {"id": "FrfyqKgHpA4"}])
+def test_title_lookup_never_exposes_restricted_video_titles(monkeypatch, changes):
+    async def run():
+        service = media.MediaService(media.MediaSettings(enabled=True))
+
+        async def capture(args):
+            return {"id": VIDEO, "availability": "public", "title": "Restricted title", **changes}
+
+        monkeypatch.setattr(service, "capture", capture)
+        with pytest.raises(HTTPException) as error:
+            await service.title(VIDEO)
+        assert error.value.status_code == 422
+    asyncio.run(run())
 
 
 def test_stream_limits_and_invalid_start_do_not_launch_processes():

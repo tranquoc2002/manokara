@@ -32,6 +32,76 @@ def add_song(page, title, url="https://example.com/test-song", lyrics="[00:00]Br
     page.locator('#add').click()
 
 
+def exercise_video_titles(page):
+    oembed = 'https://www.youtube.com/oembed?*'
+    endpoint = '**/__youtube/title?*'
+    pending = []
+    original_count = page.locator('#list li').count()
+    page.route(oembed, lambda route: route.fulfill(status=401, body='Unavailable', headers={'Access-Control-Allow-Origin':'*'}))
+    page.route(endpoint, lambda route: pending.append(route))
+
+    def lookup():
+        deadline = time.monotonic() + 5
+        while not pending and time.monotonic() < deadline:
+            page.wait_for_timeout(25)
+        assert pending, 'Server title lookup was not requested after oEmbed failed.'
+        return pending.pop(0)
+
+    try:
+        page.evaluate('reset()')
+        first = 'https://www.youtube.com/watch?v=ju03AIeny2Q'
+        page.locator('#url').fill(first)
+        page.locator('#ttl').click()
+        request = lookup()
+        # Adding before the lookup finishes must repair the saved item, without filling a new form.
+        page.locator('#add').click()
+        assert page.locator('#list li').last.locator('.t').inner_text().endswith(first)
+        request.fulfill(json={'title':'JVKE - golden hour (Karaoke Version)'})
+        page.wait_for_function('() => items.at(-1).title === "JVKE - golden hour (Karaoke Version)"')
+        assert page.evaluate('JSON.parse(localStorage.kpt2).at(-1).title') == 'JVKE - golden hour (Karaoke Version)'
+        assert page.locator('#ttl').input_value() == ''
+        assert not pending, 'Adding a song should reuse the pending title lookup.'
+
+        page.locator('#url').fill('https://www.youtube.com/watch?v=FrfyqKgHpA4')
+        page.locator('#ttl').click()
+        request = lookup()
+        page.locator('#ttl').fill('My custom song title')
+        request.fulfill(json={'title':'ROSÉ - On The Ground (Karaoke Version)'})
+        page.wait_for_function('() => youtubeTitles.get("FrfyqKgHpA4")?.promise != null')
+        page.wait_for_timeout(100)
+        assert page.locator('#ttl').input_value() == 'My custom song title'
+        page.locator('#add').click()
+        assert page.evaluate('items.at(-1).title') == 'My custom song title'
+
+        # An older request must not replace the title of a different URL.
+        page.locator('#url').fill('https://www.youtube.com/watch?v=dz3sM6ygX_g')
+        page.locator('#ttl').click()
+        older = lookup()
+        page.locator('#url').fill('https://www.youtube.com/watch?v=abcdefghijk')
+        page.locator('#ttl').click()
+        newer = lookup()
+        newer.fulfill(json={'title':'The latest video title'})
+        page.wait_for_function('() => document.querySelector("#ttl").value === "The latest video title"')
+        older.fulfill(json={'title':'An older video title'})
+        page.wait_for_timeout(100)
+        assert page.locator('#ttl').input_value() == 'The latest video title'
+        assert page.locator('#lq').input_value() == 'The latest video title'
+
+        # An existing setlist entry using its URL as a title is repaired when played.
+        page.evaluate('reset();const url="https://www.youtube.com/watch?v=dQw4w9WgXcQ";items.push({url,title:url,s:0,e:null,lrc:""});save();render()')
+        page.locator('#list li').last.locator('[data-a="go"]').click()
+        lookup().fulfill(json={'title':'Recovered saved video title'})
+        page.wait_for_function('() => document.querySelector("#now").textContent === "Recovered saved video title"')
+        assert page.evaluate('JSON.parse(localStorage.kpt2).at(-1).title') == 'Recovered saved video title'
+        print('Video title checks passed: oEmbed failure, server fallback, immediate Add, persistence, custom titles, stale responses and existing setlist repair.')
+    finally:
+        for request in pending:
+            request.abort()
+        page.unroute(oembed)
+        page.unroute(endpoint)
+        page.evaluate('(count) => {items.splice(count);reset();save();render();go(1)}', original_count)
+
+
 def exercise_server_fallback(page, obs):
     executable = shutil.which('ffmpeg')
     if not executable:
@@ -46,7 +116,7 @@ def exercise_server_fallback(page, obs):
     lookup = '**/__youtube?*'
     stream = '**/__youtube/media?*'
     starts = []
-    page.route(lookup, lambda route: route.fulfill(json={'url':'/__youtube/media?room=test&ticket=fixture', 'duration':12}))
+    page.route(lookup, lambda route: route.fulfill(json={'url':'/__youtube/media?room=test&ticket=fixture', 'duration':12, 'title':'Fetched video title'}))
     def serve(route):
         starts.append(route.request.url)
         route.fulfill(content_type='video/mp4', body=fixture.stdout, headers={'Cache-Control':'no-store'})
@@ -60,6 +130,7 @@ def exercise_server_fallback(page, obs):
         page.evaluate('testYT.options.events.onError({data:150})')
         page.locator('#stage video').wait_for()
         page.wait_for_function('() => !counting && media && !media.paused && media.readyState >= 2')
+        assert page.locator('#now').inner_text() == 'Server fallback test'
         obs.wait_for_function('() => ManokaraOutput.getSnapshot()?.playing && document.querySelector("#current").textContent === "Server fallback lyrics"')
         assert any('start=3' in url for url in starts)
         page.locator('#pause').click()

@@ -108,6 +108,7 @@ const fmt=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padSta
 const tp=ManokaraCore.timeValue;
 let items=[],ci=null,pos=0,last=-1,mode='',counting=false,cdLeft=0,cdLast=0,cdT,fbPend=null,tick,dur=null,media=null,yt=null,ytOk=false,tok=0,paused=false,acc=0,runAt=null,edit=-1,res=[];
 let mediaLookup=null,mediaStart=0;
+let generatedTitle='';const youtubeTitles=new Map();
 try{const saved=JSON.parse(localStorage.getItem('kpt2')||'[]');if(Array.isArray(saved))items=saved.filter(it=>it&&typeof it==='object'&&(it.mc||typeof it.url==='string')).map(it=>{
  const number=(v,otherwise=0)=>Number.isFinite(Number(v))?Number(v):otherwise;
  return {...it,title:String(it.title||it.url||'').slice(0,512),memo:String(it.memo||'').slice(0,4096),lrc:String(it.lrc||''),s:Math.max(0,number(it.s)),e:it.e==null?null:number(it.e,null),off:number(it.off),dur:it.dur==null?null:number(it.dur,null)};
@@ -131,6 +132,27 @@ function lyricDuration(it){return it.e!=null?Math.max(0,it.e-(it.s||0)):(it.medi
 function getL(it){const D=lyricDuration(it),raw=ManokaraLyrics.displayLrc(it),secondary=ManokaraLyrics.secondaryLrc(it),k=raw+'|'+secondary+'|'+D;if(it._L&&it._L.k===k)return it._L.a;
  const parsed=ManokaraCore.parseLyrics(raw,D);if(secondary){const second=ManokaraCore.parseLyrics(secondary,D).all;parsed.all.forEach((line,i)=>line.romaji=second[i]?.x!==line.x?second[i]?.x||'':'')}it._L={k,a:parsed.lines,all:parsed.all,timed:parsed.timed};return parsed.lines}
 const yid=ManokaraCore.youtubeId;
+const cleanVideoTitle=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').trim().slice(0,512):'';
+function automaticTitle(it){return !it.mc&&(!it.title||it.title.trim()===it.url.trim())}
+function applySongTitle(it,title){
+ title=cleanVideoTitle(title);if(!title||!automaticTitle(it))return;
+ it.title=title;if(items.includes(it)){save();render()}if(ci===it){$('#now').textContent=title;ovShow()}
+}
+function youtubeTitle(url){
+ const id=yid(url);if(!id)return Promise.resolve('');
+ const cached=youtubeTitles.get(id);if(cached&&cached.expires>Date.now())return cached.promise;
+ const promise=(async()=>{
+  try{const r=await fetch('https://www.youtube.com/oembed?format=json&url='+encodeURIComponent('https://www.youtube.com/watch?v='+id),{signal:AbortSignal.timeout(4000)});if(r.ok){const title=cleanVideoTitle((await r.json()).title);if(title)return title}}catch(e){}
+  await relayReady;
+  const r=await window.ManokaraSession.api(relayUrl('/__youtube/title'),{videoId:id},{signal:AbortSignal.timeout(55000)});
+  return r.ok?cleanVideoTitle((await r.json()).title):'';
+ })().catch(()=>'');
+ youtubeTitles.delete(id);youtubeTitles.set(id,{promise,expires:Date.now()+900000});
+ while(youtubeTitles.size>64)youtubeTitles.delete(youtubeTitles.keys().next().value);
+ promise.then(title=>{if(!title&&youtubeTitles.get(id)?.promise===promise)youtubeTitles.delete(id)});
+ return promise;
+}
+function fetchSongTitle(it){if(automaticTitle(it)){const url=it.url;youtubeTitle(url).then(title=>{if(it.url===url)applySongTitle(it,title)})}}
 const idx=()=>ci?items.indexOf(ci):-1;
 const nxt=()=>{if(!ci)return 0;const k=idx();return k>=0?k+1:pos};
 const prv=()=>{if(!ci)return 0;const k=idx();return Math.max(0,(k>=0?k:pos)-1)};
@@ -164,6 +186,7 @@ async function startServerVideo(id,it,my){
   await relayReady;if(my!==tok)return;
   const r=await window.ManokaraSession.api(relayUrl('/__youtube'),{videoId:id},{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(55000)])});
   const data=await r.json();if(my!==tok)return;if(!r.ok)throw Error(data.error||'Server playback is unavailable.');
+  applySongTitle(it,data.title);
   if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;
   const source=new URL(data.url,location.origin);if(source.origin!==location.origin||source.pathname!=='/__youtube/media')throw Error('Invalid video stream.');
   source.searchParams.set('start',String(it.s||0));
@@ -186,6 +209,7 @@ function startYT(id,it,my){$('#stage').innerHTML='<div id="ytp"></div>';
 function go(i){takeRelayOwnership();clearAll();pk='';
  if(i<0||i>=items.length){if(ci){const k=idx();last=k>=0?k:pos}if(i>=items.length)last=-1;ci=null;mode='';$('#now').textContent='—';render();updPan();if(i>=items.length)msg('Setlist finished 🎉');return}
  ci=items[i];pos=i;last=i;const it=ci,st=$('#stage'),my=tok;render();msg('');$('#now').textContent=it.mc?'MC':it.title;dur=null;acc=0;runAt=null;
+ fetchSongTitle(it);
  const id=it.mc?null:yid(it.url),isM=!it.mc&&!id&&/\.(mp4|mp3|wav|ogg|m4a|aac|flac)(\?|$)/i.test(it.url),n=(id||isM)?cdv():0;
  if(n>0){counting=true;cdLeft=n;cdLast=Date.now()}
  if(it.mc){mode='clk';runAt=Date.now();st.innerHTML='<div><div style="font-size:28px">MC</div>'+esc(it.memo||'')+'</div>';dur=it.dur}
@@ -206,21 +230,22 @@ function elapsed(){const it=ci;if(!it||counting)return 0;
  return clkEl()}
 function render(){showOff();$('#list').innerHTML=items.map((it,i)=>'<li class="'+(it===ci?'on':'')+'" data-i="'+i+'"><span class="t" data-a="go">'+(i+1)+'. '+(it.mc?'🎙 MC '+esc(it.memo||''):esc(it.title)+(it.lrc?' ⏱':''))+'</span><small>'+(it.mc?(it.dur!=null?fmt(it.dur):''):(it.e!=null?fmt(it.e-(it.s||0)):''))+'</small>'+(it.mc?'':'<button class="s" data-a="ed">✎</button>')+'<button class="s" data-a="up">▲</button><button class="s" data-a="dn">▼</button><button class="s" data-a="del">✕</button></li>').join('')||'<small>No songs yet. Add one below.</small>'}
 $('#list').onclick=e=>{const b=e.target.closest('[data-a]');if(!b)return;const i=+b.closest('li').dataset.i,a=b.dataset.a;
- if(a==='go')go(i);else if(a==='ed'){edit=i;const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#lq').value=it.title;lyricEditor.load(it);$('#add').textContent='✓ Save changes';$('#cancel').hidden=false;$('#ftitle').scrollIntoView()}
+ if(a==='go')go(i);else if(a==='ed'){edit=i;generatedTitle='';const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#lq').value=it.title;lyricEditor.load(it);$('#add').textContent='✓ Save changes';$('#cancel').hidden=false;$('#ftitle').scrollIntoView()}
  else{const editing=edit>=0?items[edit]:null,c=ci,k0=c?items.indexOf(c):-1,w=k0>=0?k0:pos;if(a==='del')items.splice(i,1);else{const j=a==='up'?i-1:i+1;if(j>=0&&j<items.length)[items[i],items[j]]=[items[j],items[i]]}
   if(editing){const newEdit=items.indexOf(editing);if(newEdit<0)reset();else edit=newEdit}if(c){const k=items.indexOf(c);if(k>=0)pos=k;else{if(k0>=0){pos=w;msg('Removed from the setlist. The current song keeps playing until it ends or you press Stop.')}else if(a==='del'&&i<pos)pos--}}save();render()}};
-function reset(){edit=-1;pickDur=undefined;['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');lyricEditor.reset();$('#loff').value=0;$('#add').textContent='+ Add song';$('#cancel').hidden=true;$('#lres').innerHTML=''}
+function reset(){edit=-1;pickDur=undefined;generatedTitle='';['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');lyricEditor.reset();$('#loff').value=0;$('#add').textContent='+ Add song';$('#cancel').hidden=true;$('#lres').innerHTML=''}
 $('#cancel').onclick=reset;
 $('#add').onclick=()=>{const u=$('#url').value.trim();if(!/^https?:\/\//.test(u)){msg('Paste a karaoke URL first.');return}
  const start=tp($('#st').value),end=tp($('#en').value);if(Number.isNaN(start)||Number.isNaN(end)||end!=null&&end<=(start||0)){msg('Use valid times (mm:ss or seconds); End must be after Start.');return}if(new TextEncoder().encode(JSON.stringify($('#llrc').value)).length>230000){msg('Lyrics are too long for the relay (maximum 230 KB).');return}
  let lyricDraft;try{lyricDraft=lyricEditor.read()}catch(error){msg(error.message);return}
  const it={title:($('#ttl').value.trim()||u).slice(0,512),url:u,s:start||0,e:end,lrc:$('#llrc').value,...lyricDraft,ldur:pickDur??(edit>=0?items[edit].ldur:undefined),off:+$('#loff').value||0};
  const lyricBytes=new TextEncoder().encode(JSON.stringify({lrc:ManokaraLyrics.displayLrc(it),romajiLrc:ManokaraLyrics.secondaryLrc(it)})).length;if(lyricBytes>230000){msg('Combined output lyrics exceed 230 KB. Shorten the LRC or choose a single display language.');return}
- if(edit>=0){const existing=items[edit],reloadCurrent=existing===ci&&(existing.url!==it.url||existing.s!==it.s||existing.e!==it.e);Object.assign(existing,it);delete existing._L;if(existing===ci){dur=it.e!=null?it.e-it.s:null;timelineVersion++;$('#now').textContent=it.title;if(reloadCurrent)go(edit)}}else items.push(it);reset();const persisted=save();render();msg(persisted?'Saved.':'Browser storage is full or unavailable. Changes remain in this window only.')};
+ let savedItem=it;if(edit>=0){const existing=items[edit],reloadCurrent=existing===ci&&(existing.url!==it.url||existing.s!==it.s||existing.e!==it.e);Object.assign(existing,it);savedItem=existing;delete existing._L;if(existing===ci){dur=it.e!=null?it.e-it.s:null;timelineVersion++;$('#now').textContent=it.title;if(reloadCurrent)go(edit)}}else items.push(it);reset();const persisted=save();render();msg(persisted?'Saved.':'Browser storage is full or unavailable. Changes remain in this window only.');fetchSongTitle(savedItem)};
 $('#addmc').onclick=()=>{const duration=tp($('#mcd').value);if(!Number.isFinite(duration)||duration<=0){msg('Enter a positive MC duration (mm:ss or seconds).');return}items.push({mc:1,memo:$('#mcm').value,dur:duration});$('#mcm').value=$('#mcd').value='';save();render()};
 $('#clr').onclick=()=>{if(confirm('Remove all songs?')){items=[];pos=0;last=-1;reset();save();render();if(ci)msg('Setlist cleared. The current song keeps playing until it ends or you press Stop.')}};
-$('#url').onchange=async()=>{const u=$('#url').value.trim();if(!yid(u)||$('#ttl').value)return;
- try{const t=(await(await fetch('https://www.youtube.com/oembed?format=json&url='+encodeURIComponent(u))).json()).title;if(t){$('#ttl').value=t;$('#lq').value=t.replace(/\s*[\(\[【].*$/,'')}}catch(e){}};
+$('#url').onchange=async()=>{const u=$('#url').value.trim(),before=$('#ttl').value,query=$('#lq').value;if(!yid(u)||before.trim()&&before.trim()!==u&&before!==generatedTitle)return;
+ const title=await youtubeTitle(u);if(!title||$('#url').value.trim()!==u||$('#ttl').value!==before&&$('#ttl').value.trim())return;
+ $('#ttl').value=generatedTitle=title;if(!$('#lq').value||$('#lq').value===query)$('#lq').value=title.replace(/\s*[\(\[【].*$/,'')};
 $('#lsearch').onclick=async()=>{const q=$('#lq').value.trim()||$('#ttl').value.trim();if(!q)return;$('#lres').textContent='Searching…';
  try{res=(await(await fetch('https://lrclib.net/api/search?q='+encodeURIComponent(q))).json()).sort((a,b)=>!!b.syncedLyrics-!!a.syncedLyrics);
   $('#lres').innerHTML=res.slice(0,10).map((x,i)=>'<li data-i="'+i+'"><span>'+esc(x.trackName+' — '+x.artistName)+(x.syncedLyrics?' ⏱ synced':' 📄 plain only')+'</span><small>'+fmt(x.duration||0)+'</small></li>').join('')||'No results.'}
