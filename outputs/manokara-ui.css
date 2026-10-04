@@ -213,7 +213,7 @@ b,strong {
 }
 
 .app-header {
-  height: 82px;
+  height: 52px;
   flex: none;
   display: flex;
   align-items: center;
@@ -224,13 +224,13 @@ b,strong {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px
+  gap: 9px
 }
 
 .brand-mark {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   background: var(--ac);
   color: var(--ac-fg);
   display: grid;
@@ -238,28 +238,27 @@ b,strong {
 }
 
 .brand-mark .icon {
-  width: 24px;
-  height: 24px
+  width: 20px;
+  height: 20px
 }
 
 .brand h1 {
-  font-size: 23px;
+  font-size: 20px;
   letter-spacing: -1px;
   font-weight: 650;
   line-height: 1.1
-}
-
-.brand small {
-  display: block;
-  font-size: 12px;
-  margin-top: 4px;
-  letter-spacing: .2px
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 10px
+}
+
+.header-actions>button {
+  min-height: 32px;
+  padding: 6px 11px;
+  font-size: 12px
 }
 
 .connection {
@@ -569,7 +568,7 @@ ol {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: clamp(180px,28dvh,360px);
+  height: clamp(180px,40dvh,560px);
   background: var(--stage);
   border-radius: 10px;
   overflow: hidden;
@@ -1727,9 +1726,6 @@ kbd {
     grid-template-columns: 185px minmax(0,1fr) 240px;
     gap: 12px
   }
-  .app-header {
-    height: 70px
-  }
   .section-head {
     padding: 18px 15px 12px
   }
@@ -1794,9 +1790,6 @@ kbd {
   .connection {
     font-size: 11px
   }
-  .brand small {
-    font-size: 11px
-  }
   .clip-row {
     gap: 7px
   }
@@ -1819,17 +1812,17 @@ kbd {
   }
   .app-header {
     height: auto;
-    min-height: 78px;
+    min-height: 52px;
     flex-wrap: wrap;
     gap: 10px;
-    padding-block: 15px
+    padding-block: 8px
   }
   .brand h1 {
-    font-size: 22px
+    font-size: 20px
   }
   .brand-mark {
-    width: 36px;
-    height: 36px
+    width: 30px;
+    height: 30px
   }
   .connection {
     display: none
@@ -1962,18 +1955,15 @@ kbd {
   }
   .app-header {
     padding-inline: 3px;
-    min-height: 76px
-  }
-  .brand small {
-    display: none
+    min-height: 52px
   }
   .brand h1 {
-    font-size: 21px
+    font-size: 20px
   }
   .brand-mark {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px
+    width: 30px;
+    height: 30px;
+    border-radius: 9px
   }
   .brand {
     gap: 9px
