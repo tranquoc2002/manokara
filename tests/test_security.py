@@ -20,6 +20,56 @@ PASSWORD = "test-password-with-enough-entropy"
 HASH = server.password_hash(PASSWORD)
 
 
+def test_default_database_is_created_in_user_state_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(server.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("MANOKARA_ORIGIN", ORIGIN)
+    monkeypatch.setenv("MANOKARA_PASSWORD_HASH", HASH)
+    monkeypatch.delenv("MANOKARA_DATA_DIR", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    settings = server.Settings.from_env()
+    assert settings.data_dir == tmp_path / ".local" / "state" / "manokara"
+    with TestClient(server.create_app(settings), base_url=ORIGIN) as client:
+        assert client.get("/healthz").status_code == 200
+        assert (settings.data_dir / "relay.sqlite3").is_file()
+
+
+def test_state_directory_supports_xdg_and_explicit_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("MANOKARA_ORIGIN", ORIGIN)
+    monkeypatch.setenv("MANOKARA_PASSWORD_HASH", HASH)
+    monkeypatch.delenv("MANOKARA_DATA_DIR", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
+    assert server.Settings.from_env().data_dir == tmp_path / "xdg" / "manokara"
+    monkeypatch.setenv("MANOKARA_DATA_DIR", str(tmp_path / "custom"))
+    assert server.Settings.from_env().data_dir == tmp_path / "custom"
+
+
+def test_unwritable_database_reports_directory_and_fix(tmp_path, monkeypatch):
+    def denied(*args, **kwargs):
+        raise server.sqlite3.OperationalError("unable to open database file")
+    monkeypatch.setattr(server.sqlite3, "connect", denied)
+    with pytest.raises(ValueError) as error:
+        server.Store(server.Settings(ORIGIN, HASH, tmp_path))
+    assert str(tmp_path) in str(error.value)
+    assert "MANOKARA_DATA_DIR" in str(error.value)
+    assert "writable by the account running the server" in str(error.value)
+
+
+def test_password_generator_accepts_ten_characters(monkeypatch, capsys):
+    monkeypatch.setattr(server.sys, "argv", ["manokara_server.py", "hash-password"])
+    monkeypatch.setattr(server.getpass, "getpass", lambda prompt: "abcdefghij")
+    server.main()
+    encoded = capsys.readouterr().out.strip()
+    assert server.valid_password_hash(encoded)
+    assert server.verify_password("abcdefghij", encoded)
+
+
+def test_password_generator_rejects_nine_characters(monkeypatch):
+    monkeypatch.setattr(server.sys, "argv", ["manokara_server.py", "hash-password"])
+    monkeypatch.setattr(server.getpass, "getpass", lambda prompt: "abcdefghi")
+    with pytest.raises(SystemExit, match="between 10 and 1024"):
+        server.main()
+
+
 @pytest.fixture
 def app(tmp_path):
     return server.create_app(server.Settings(ORIGIN, HASH, tmp_path))

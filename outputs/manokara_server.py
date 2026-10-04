@@ -1,4 +1,4 @@
-"""Authenticated Manokara relay. Run one Uvicorn worker behind cloudflared."""
+"""Authenticated Manokara app and relay. Run one worker on loopback."""
 
 import asyncio
 import base64
@@ -81,8 +81,9 @@ class Settings:
 
     @classmethod
     def from_env(cls):
+        state_home = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
         return cls(os.environ.get("MANOKARA_ORIGIN", ""), os.environ.get("MANOKARA_PASSWORD_HASH", ""),
-                   Path(os.environ.get("MANOKARA_DATA_DIR", "/var/lib/manokara")),
+                   Path(os.environ.get("MANOKARA_DATA_DIR") or state_home / "manokara").expanduser(),
                    os.environ.get("MANOKARA_ALLOW_HTTP") == "1")
 
 
@@ -90,13 +91,22 @@ class Store:
     """Bounded persistent credentials/rooms; live playback deliberately stays in memory."""
 
     def __init__(self, settings):
-        settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         db_path = settings.data_dir / "relay.sqlite3"
-        if db_path.is_symlink():
-            raise ValueError("The state database must not be a symlink.")
-        # All runtime DB access is synchronous on one ASGI event loop. TestClient starts its own thread.
-        self.db = sqlite3.connect(db_path, check_same_thread=False)
-        os.chmod(db_path, 0o600)
+        try:
+            settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if db_path.is_symlink():
+                raise ValueError("The state database must not be a symlink.")
+            # All runtime DB access is synchronous on one ASGI event loop. TestClient starts its own thread.
+            self.db = sqlite3.connect(db_path, check_same_thread=False)
+            os.chmod(db_path, 0o600)
+        except (OSError, sqlite3.Error) as error:
+            if hasattr(self, "db"):
+                self.db.close()
+            raise ValueError(
+                f"Cannot open the database in {settings.data_dir}: {error}. "
+                "Set MANOKARA_DATA_DIR to a directory writable by the account running the server "
+                "(for example $HOME/.local/state/manokara)."
+            ) from error
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS sessions (digest TEXT PRIMARY KEY, expires REAL NOT NULL);
@@ -478,9 +488,9 @@ def create_app(settings=None):
 
 def main():
     if sys.argv[1:] == ["hash-password"]:
-        password = getpass.getpass("Operator password (at least 16 characters): ")
-        if len(password) < 16 or len(password) > 1024:
-            raise SystemExit("Use a password between 16 and 1024 characters.")
+        password = getpass.getpass("Operator password (at least 10 characters): ")
+        if len(password) < 10 or len(password) > 1024:
+            raise SystemExit("Use a password between 10 and 1024 characters.")
         if password != getpass.getpass("Repeat password: "):
             raise SystemExit("Passwords did not match.")
         print(password_hash(password))

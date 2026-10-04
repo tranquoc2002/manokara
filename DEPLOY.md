@@ -1,226 +1,91 @@
-# Deploy Manokara on Arch Linux
+# Deploy Manokara
 
-Manokara runs as a single Python process on `127.0.0.1:8000`. A separate `cloudflared` service publishes it over HTTPS. The browser handles playback; Python relays live lyrics. No Workers, Pages, public Python port, or VPS browser is required.
+Keep the project in `$HOME/manokara` and run it as your normal user. Python serves the frontend and lyric relay on `127.0.0.1:8000`. Caddy is not required. You manage Cloudflare Tunnel and cron independently.
 
-The included setup uses one trusted operator password, separate rooms, and read-only OBS links. All signed-in operators share the same trusted account; this is not a public multi-user service with separate user accounts.
+## Install once
 
-## 1. Install the application
+From your project folder on the VPS:
 
-Run the following from your project checkout on the VPS. Use a full Arch upgrade, including security updates:
-
-```bash
-sudo pacman -Syu --needed python python-pip cloudflared
-sudo useradd --system --user-group --home-dir /var/lib/manokara --shell /usr/bin/nologin manokara
-sudo useradd --system --user-group --home-dir /nonexistent --shell /usr/bin/nologin cloudflared
-sudo install -d -m 755 /opt/manokara
-sudo cp -a outputs deploy tests requirements.txt requirements-dev.txt README.md DEPLOY.md /opt/manokara/
-sudo chown -R root:root /opt/manokara
-sudo chmod -R go-w /opt/manokara
-sudo python -m venv /opt/manokara/.venv
-sudo /opt/manokara/.venv/bin/python -m pip install -r /opt/manokara/requirements.txt
-```
-
-Create each service account only once. If a matching account already exists, check its group and privileges before reusing it. Keep `/opt/manokara` readable but writable only by the administrator; the app account must not be able to modify its executable code.
-
-## 2. Configure the hostname and password
-
-Choose the final hostname, for example `karaoke.example.com`. Generate a strong password hash interactively; the password is not passed on the command line or stored in the configuration:
-
-```bash
-/opt/manokara/.venv/bin/python /opt/manokara/outputs/manokara_server.py hash-password
-sudo install -d -m 700 /etc/manokara
-sudo install -m 600 /opt/manokara/deploy/manokara.env.example /etc/manokara/manokara.env
-sudoedit /etc/manokara/manokara.env
-```
-
-Set `MANOKARA_ORIGIN` to your exact HTTPS origin, with no path or trailing slash. Replace `MANOKARA_PASSWORD_HASH` with the generated `scrypt:...` value. Keep `MANOKARA_DATA_DIR=/var/lib/manokara`. Configuration without a valid origin and password hash fails at startup.
-
-The systemd manager reads the root-only environment file before dropping privileges. Password hashes are sensitive too; do not commit this file.
-
-```bash
-sudo install -m 644 /opt/manokara/deploy/manokara.service /etc/systemd/system/manokara.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now manokara.service
-curl --fail -H 'Host: karaoke.example.com' http://127.0.0.1:8000/healthz
-```
-
-Use your actual hostname in the `Host` header. An ordinary request to `localhost` is rejected in production because it does not match the configured hostname. `systemd` creates `/var/lib/manokara` with restricted permissions. The app has no root privileges, no external network access, a restricted filesystem, and resource limits.
-
-## 3. Create the Cloudflare Tunnel
-
-The following uses a locally managed named tunnel. Authenticate as the administrator; do not give the running connector your Cloudflare account certificate:
-
-```bash
-sudo cloudflared tunnel login
-sudo cloudflared tunnel create manokara
-```
-
-Record the tunnel UUID and the printed credentials-file path. On a typical root installation the file is `/root/.cloudflared/UUID.json`. Use the actual UUID in the next command:
-
-```bash
-sudo install -d -m 750 -o root -g cloudflared /etc/cloudflared
-sudo install -m 640 -o root -g cloudflared /root/.cloudflared/UUID.json /etc/cloudflared/UUID.json
-sudo install -m 640 -o root -g cloudflared /opt/manokara/deploy/cloudflared.yml.example /etc/cloudflared/config.yml
-sudoedit /etc/cloudflared/config.yml
-```
-
-Replace the UUID in `tunnel` and `credentials-file`. Set both `hostname` and `httpHostHeader` to your hostname. Keep `service: http://127.0.0.1:8000` and the final `http_status:404` rule. The tunnel's local HTTP hop stays on loopback; visitors use HTTPS through Cloudflare.
-
-```bash
-sudo cloudflared tunnel route dns manokara karaoke.example.com
-sudo -u cloudflared cloudflared --config /etc/cloudflared/config.yml tunnel ingress validate
-sudo install -m 644 /opt/manokara/deploy/cloudflared-manokara.service /etc/systemd/system/cloudflared-manokara.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now cloudflared-manokara.service
-```
-
-Keep the account-wide `cert.pem` restricted to the administrator. The connector receives only the credentials for its named tunnel. Use this one tunnel service; do not also start another connector service from `cloudflared service install`.
-
-Enable Cloudflare's HTTP-to-HTTPS redirect for the hostname. Disable Rocket Loader and HTML/JavaScript rewriting for this app: they can invalidate the content security policy's script hashes. Bypass caching on `/__*`, `/manokara.html`, `/manokara-login.html`, `/manokara-obs.html`, and `/manokara-folia.html`. The origin sends `Cache-Control: no-store` on every response; avoid any Cache Everything rule that overrides it.
-
-The application already authenticates controllers. Cloudflare Access is an optional extra layer. If you add Access, ensure OBS can load its page, its JS/CSS/Folia assets, and `/__lyric-state` without an interactive Access login. A whole-hostname Access policy will otherwise block a cookie-free OBS source. Any Access bypass for the lyric endpoint still requires the app's viewer token for reads and an operator session for writes.
-
-## 4. Use the controller and OBS
-
-Open `https://karaoke.example.com`, sign in, and wait for "OBS relay connected." Copy the OBS URL into an OBS Browser Source. Keep the source active while streaming.
-
-OBS URLs look like `/manokara-obs.html?room=...#view=...`. The fragment contains a read-only bearer credential; HTTP requests and referrer headers never include it. The viewer sends it in the Authorization header when polling the relay. The room ID alone grants no access. Sharing the link shares access to those lyrics, so keep it private.
-
-"Replace OBS link" immediately revokes the previous link. Copy the replacement URL into every OBS source or lyric window that should keep working. Revocation stops future reads; it cannot erase lyrics somebody already received. OBS needs no operator cookie and cannot write, claim ownership, rotate tokens, or create rooms.
-
-Rooms are issued by the server and remembered in browser storage. Copy an authenticated controller URL to another signed-in browser if you intentionally want it to control the same room. Clicking or typing in a controller window transfers ownership to that window. A writer lease lasts 15 seconds and renews while publishing; a closed or disconnected window cannot hold ownership indefinitely.
-
-Operator sessions last 12 hours. Sign out invalidates the session on the server. Changing the configured password hash and restarting invalidates all operator sessions. Existing viewer links remain valid until rotated or their rooms are deleted.
-
-Up to 128 rooms are supported. To retire a room, while signed in, run this in the controller's browser console:
-
-```javascript
-await ManokaraSession.api('/__room/delete', {
-  room: new URL(location.href).searchParams.get('room')
-});
-location.reload();
-```
-
-Deleting a room revokes its viewer links and discards its current lyrics. Reloading creates a replacement room.
-
-Setlists and preferences stay in local storage on the device/browser where you created them. They are not uploaded to the VPS. Live playback state resets after a server restart; an open controller publishes it again automatically. Room identities, viewer-token versions, and unexpired sessions survive restarts in `/var/lib/manokara/relay.sqlite3`. Run exactly one Python worker; live state and rate limits are deliberately local to that process.
-
-## 5. Verify the VPS deployment
-
-```bash
-sudo systemctl status manokara.service cloudflared-manokara.service
-sudo journalctl -u manokara.service -u cloudflared-manokara.service -n 100 --no-pager
-sudo ss -lntp
-sudo systemd-analyze verify /etc/systemd/system/manokara.service /etc/systemd/system/cloudflared-manokara.service
-sudo systemd-analyze security manokara.service cloudflared-manokara.service
-curl --fail https://karaoke.example.com/healthz
-```
-
-Confirm Python listens only on `127.0.0.1:8000`; the optional connector metrics listener is also on loopback. Keep port 8000 blocked by your VPS firewall and provider firewall. Tunnel requires outbound connectivity, including port 7844 for QUIC/HTTP2; it needs no public inbound HTTP/HTTPS port. Retain the inbound access you need for administration.
-
-In a private browser, controller pages must redirect to login and a room URL without a viewer credential must not return lyrics. Verify OBS displays live lyrics, replacing its link stops the old viewer, and Folia/JIZURA still render. Check browser console messages for CSP errors. Turn off Cloudflare transformations that inject scripts before weakening the policy.
-
-The controller and login CSP prohibit dynamic JavaScript evaluation. The Folia viewer document permits `unsafe-eval` because the bundled Pixi renderer compiles shader/uniform functions at runtime. This exception is scoped to that viewer document; lyric payloads are validated and rendered as text. Styles permit inline rules because the visualizers change them dynamically.
-
-Access logs are disabled so URLs and room identifiers are not written by Uvicorn. Do not enable proxy debug logging that dumps Authorization or Cookie headers. For operational health, use the service logs and `/healthz`. That endpoint confirms the Python process is responding; it does not prove the tunnel, browser playback, or OBS connection is working.
-
-## Cron alternative
-
-Caddy is not required: the Python application serves both the frontend assets and the relay. Cloudflare handles public HTTPS and the tunnel forwards to Python over loopback. Install the application, its environment file, and the tunnel configuration as described above before choosing a startup method.
-
-For cron instead of systemd, install `cronie` and `logrotate`, make the launchers executable, and disable the two application services:
-
-```bash
-sudo pacman -S --needed cronie logrotate
-sudo chmod 755 /opt/manokara/deploy/start-manokara.sh /opt/manokara/deploy/start-cloudflared.sh
-sudo systemctl disable --now manokara.service cloudflared-manokara.service
-sudo install -m 644 /opt/manokara/deploy/manokara.logrotate /etc/logrotate.d/manokara
-sudo systemctl enable --now logrotate.timer
-sudo systemctl enable --now cronie.service
-sudo crontab -e
-```
-
-Add these entries to **root's** crontab:
-
-```cron
-@reboot /opt/manokara/deploy/start-manokara.sh
-@reboot /opt/manokara/deploy/start-cloudflared.sh
-```
-
-The launchers stay in the foreground for cron and drop privileges before starting Python or the tunnel. Each holds a `flock` lock for the process lifetime, rejects an already-running matching systemd service, and writes restricted logs to `/var/log/manokara/server.log` and `/var/log/manokara/tunnel.log`. No `nohup`, background ampersand, or Caddy process is needed in the cron entry. An app/tunnel startup order is unnecessary: the connector retries while the app is starting.
-
-`@reboot` entries apply at the next cron startup; adding them does not start the app immediately. To start now, run each launcher in a separate terminal (it will remain attached), or reboot after installation. Check logs with:
-
-```bash
-sudo tail -n 100 /var/log/manokara/server.log /var/log/manokara/tunnel.log
-sudo pgrep -a -u manokara
-sudo pgrep -a -u cloudflared
-```
-
-To stop cron-managed processes:
-
-```bash
-sudo pkill -TERM -u manokara -f '/opt/manokara/outputs/manokara_server.py'
-sudo pkill -TERM -u cloudflared -f '/etc/cloudflared/config.yml tunnel run'
-```
-
-Remove the cron entries before switching back to systemd. For updates, stop the cron-managed Python process first, copy/install the new files as described below, and restart it using the launcher or reboot. Cron's `@reboot` does not restart crashed processes or provide the filesystem, network, and memory sandbox from the supplied systemd units. The app still runs as an unprivileged account with its own authentication and request limits. Choose systemd if you want supervision and the additional sandbox. Log rotation uses `copytruncate` because these foreground launchers keep their log descriptors open; a small amount of log output can be lost during rotation.
-
-## Updates and backups
-
-Before updating, back up `/var/lib/manokara` and `/etc/manokara` securely. Stop the app before copying its SQLite database. Keep backups outside the web assets directory and restrict them to the administrator.
-
-From the new project checkout:
-
-```bash
-sudo systemctl stop manokara.service
-sudo cp -a outputs deploy tests requirements.txt requirements-dev.txt README.md DEPLOY.md /opt/manokara/
-sudo chown -R root:root /opt/manokara
-sudo chmod -R go-w /opt/manokara
-sudo /opt/manokara/.venv/bin/python -m pip install -r /opt/manokara/requirements.txt
-sudo systemctl start manokara.service
-```
-
-If service templates change, review and reinstall them, then run `systemctl daemon-reload` and restart the affected service. Always restart after modifying HTML so the CSP hashes are recomputed. Restore state backups with the manokara account as owner and directory/file modes 700/600. Keep Arch and the pinned Python dependencies updated; after a major Arch Python upgrade, recreate the virtual environment and install the requirements again.
-
-Deployment has no dependency on GitHub Actions, Workers, Wrangler, or Pages. Remove old Cloudflare deployment secrets from GitHub and retire any existing Worker/custom-domain route in the Cloudflare dashboard so it does not conflict with this tunnel hostname. Removing repository files does not delete a previously deployed Worker.
-
-## Local development and tests
-
-Use a separate local virtual environment. Local HTTP must be explicitly enabled and is restricted to loopback hostnames:
-
-```bash
+```sh
+cd "$HOME/manokara"
 python -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python outputs/manokara_server.py hash-password
-export MANOKARA_ORIGIN=http://localhost:8000
-export MANOKARA_ALLOW_HTTP=1
-export MANOKARA_DATA_DIR="$PWD/.state"
-read -r -p 'Generated password hash: ' MANOKARA_PASSWORD_HASH
-export MANOKARA_PASSWORD_HASH
-.venv/bin/python outputs/manokara_server.py
 ```
 
-On Windows use `.venv\Scripts\python.exe` and PowerShell `$env:MANOKARA_*` assignments instead of `export`. Open the exact configured hostname. Production cookies are Secure, HttpOnly, and SameSite=Strict; the explicitly enabled local HTTP mode omits Secure. Do not use local mode on the VPS.
+Use Python 3.12 or newer. The last command asks for your operator password (at least 10 characters) and prints a hash. Copy its complete output, including the `scrypt:` prefix.
 
-```bash
+Edit `start-manokara.sh` and paste that hash into `MANOKARA_PASSWORD_HASH`. The hostname is already set to `https://mano.del4yowo.id.vn`; change it if needed. If your checkout is somewhere other than `$HOME/manokara`, change the two paths in the last line.
+
+```sh
+chmod 700 start-manokara.sh
+./start-manokara.sh
+```
+
+The script runs in the foreground. Run it as the same user who owns your project, without `sudo`. It works regardless of the current working directory. The script does not install packages, start a tunnel, or create services.
+
+## Database location and your startup error
+
+The script uses `$HOME/.local/state/manokara`. Python creates that directory and its database automatically. If `MANOKARA_DATA_DIR` is unset, the backend uses `$XDG_STATE_HOME/manokara`, or `$HOME/.local/state/manokara` when XDG_STATE_HOME is unset.
+
+`sqlite3.OperationalError: unable to open database file` with `/var/lib/manokara` means the account running Python cannot open/create the database there. Change your start script's data directory to:
+
+```sh
+export MANOKARA_DATA_DIR="$HOME/.local/state/manokara"
+```
+
+You do not need to create a system account or make `/var/lib` writable. A fresh state directory creates new rooms and invalidates old OBS links; copy a new OBS URL from the app. If you need to preserve existing rooms, stop the old server and copy its `relay.sqlite3` into the new directory with your user as owner and mode 600.
+
+Startup now reports the failing directory and a writable-directory suggestion instead of an SQLite traceback for this error.
+
+## Tunnel connection
+
+Point your tunnel at `http://127.0.0.1:8000`. The request's Host header must match the hostname in `MANOKARA_ORIGIN`; preserve the public Host header or set the tunnel's HTTP Host Header to `mano.del4yowo.id.vn`.
+
+A local check is:
+
+```sh
+curl --fail -H 'Host: mano.del4yowo.id.vn' http://127.0.0.1:8000/healthz
+```
+
+Open `https://mano.del4yowo.id.vn`, sign in with your operator password, and copy the OBS URL into an OBS Browser Source. OBS links grant read-only access; "Replace OBS link" revokes the old link. OBS does not need your operator login cookie.
+
+Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocket Loader, which can break the script hashes in the content security policy. Leave HTML and relay responses uncached. If you use Cloudflare Access, allow the OBS page, its assets, and `/__lyric-state` to load without an interactive login; the app still validates viewer tokens and operator sessions.
+
+## Runtime behavior
+
+One trusted operator password is shared by signed-in controllers. Browser rooms are separate; clicking a controller claims its room. Operator sessions last 12 hours, and changing the password hash then restarting revokes existing operator sessions. OBS links remain valid until rotated or their room is deleted.
+
+Setlists and preferences stay in the browser. Room identities, viewer-token versions, and unexpired sessions survive restarts in the state database. Live playback resets after a restart and an open controller publishes it again. Run one Python process; the script does not supervise or restart it.
+
+The output and Folia share one clock and one relay reader. Clock samples use server-reported age, so controller and OBS devices can have different wall clocks. A disconnected clock extrapolates for at most 15 seconds. Keep the OBS Browser Source active to avoid background shutdown.
+
+The controller/login CSP prohibits dynamic JavaScript evaluation. Folia's viewer document has a scoped `unsafe-eval` exception for Pixi's shader/uniform compilation. Public hashed Folia assets use immutable caching; HTML, credentials, and relay state remain `no-store`. Access logs are disabled.
+
+## Updates and tests
+
+Stop the server, update the project and install its requirements, then run your start script again. Keep your configured script and state directory when updating; do not commit your password hash. Back up the state directory with the server stopped. Restart after editing HTML so CSP hashes are recomputed.
+
+```sh
+.venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python -m pytest tests/test_security.py
-.venv/bin/python -m pip install playwright==1.63.0
-.venv/bin/python -m playwright install chromium
-.venv/bin/python tests/browser_smoke.py
 node --test tests/test_core.cjs
 ```
 
-The Chromium test starts and stops its own server with a temporary database. It checks login, live relay, cookie-free OBS, Folia/JIZURA, credential rotation, logout, CSP, responsive layout, editing/reordering, countdown, pause, buffering, seeks, MC and stop. Playback regressions use a deterministic YouTube API fixture; they do not prove a particular public video permits embedding. Add `--all-effects` to check every bundled visualizer. Set `MANOKARA_TEST_BROWSER` to an installed Chromium/Edge executable to use it instead of downloading the test browser. Node is only needed for the shared-clock unit tests. External font/media providers still need to be reachable for their functionality.
+For real-browser tests:
 
-The output and Folia share one clock and one relay reader. Clock samples use server-reported age, so the controller and OBS devices can have different wall clocks. A disconnected clock extrapolates for at most 15 seconds. Browser background throttling and OBS source shutdown settings still apply; keep the OBS Browser Source active.
+```sh
+.venv/bin/python -m pip install playwright==1.63.0
+.venv/bin/python -m playwright install chromium
+.venv/bin/python tests/browser_smoke.py --all-effects
+```
 
-Folia's hashed bundles use public immutable caching; HTML, credentials and relay state remain `no-store`. The Folia document is retained during normal playback. Switching to another Folia mode creates a separate document so Pixi renderers cannot retain references to another mode's destroyed textures.
+These tests start/stop their own temporary local server. Set `MANOKARA_TEST_BROWSER` to an installed Chromium/Edge executable if preferred. Browser playback cases use a deterministic YouTube API fixture; they do not establish that any particular public video permits embedding.
+
+For local HTTP development only, set `MANOKARA_ORIGIN=http://localhost:8000` and `MANOKARA_ALLOW_HTTP=1`, then invoke the Python entry point directly. Local HTTP is restricted to loopback hostnames. On Windows use `.venv\Scripts\python.exe` and PowerShell `$env:MANOKARA_*` assignments.
 
 ## Source and notices
 
 The public `/sources/` URLs deliberately expose the bundled Folia source archive, its integration source, and third-party licenses/notices. Links are available from the login and controller pages. Keep them when deploying updates. Arbitrary directories, Python source, dotfiles, and symlinked files are not served. See the bundled Folia notice for upstream licensing and usage terms.
 
 To rebuild Folia, unpack the provided upstream source archive, copy `manokara-folia.tsx` and `manokara-folia.css` from `outputs/FOLIA-INTEGRATION-SOURCE` into `src/`, copy its HTML and Vite configuration into the upstream root, and copy `ObsWebSourceApp.tsx` into `src/components/obs/`. The shared `manokara-core.js` must be available in Vite's public directory. Install the upstream locked dependencies and run Vite with `vite.manokara.config.mts`. Copy the resulting `folia-assets` and generated module/preload/stylesheet tags into the output entry page, retaining its authenticated source bootstrap and shared-core script. Deploy the integration source alongside the generated bundles.
-
-Reference documentation: [Cloudflare named tunnels](https://developers.cloudflare.com/tunnel/features/locally-managed-tunnels/create-local-tunnel/), [Cloudflare private applications and Access](https://developers.cloudflare.com/cloudflare-one/setup/secure-private-apps/private-web-app/), [Uvicorn settings](https://uvicorn.dev/settings/), [Arch cloudflared package](https://archlinux.org/packages/extra/x86_64/cloudflared/), and [systemd service hardening](https://man.archlinux.org/man/systemd.exec.5.en).
