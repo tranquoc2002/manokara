@@ -4,9 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manokara · Folia visualizers</title>
-  </head>
-  <body>
-    <div id="root"></div>
+    <link rel="icon" href="./manokara.ico">
+    <script src="./manokara-core.js"></script>
+    <script>
+      (() => {
+        const room=new URL(location.href).searchParams.get('room')||'';
+        try{if(parent!==window&&parent.ManokaraOutput?.room===room){window.ManokaraFoliaSource=parent.ManokaraOutput;return}}catch(_){}
+        const clock=ManokaraCore.createClock(),listeners=new Set();
+        const token=new URLSearchParams(location.hash.slice(1)).get('view')||'';
+        let state={ready:false},pending=false;
+        window.ManokaraFoliaSource={time:()=>clock.time(),getSnapshot:()=>state,subscribe(fn){listeners.add(fn);fn(state);return()=>listeners.delete(fn)}};
+        async function poll(){
+          if(pending)return;pending=true;
+          try{
+            const response=await fetch('/__lyric-state?room='+encodeURIComponent(room),{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(4000),headers:token?{Authorization:'Bearer '+token}:{}});
+            if(response.ok){const next=await response.json();state=next.ready===false?next:clock.accept(next)}
+            else if(response.status===401||response.status===404)state={ready:false};
+            else return;
+            for(const fn of listeners)fn(state);
+          }catch(_){}finally{pending=false}
+        }
+        poll();setInterval(poll,200);
+      })();
+    </script>
     <script type="module" src="/src/manokara-folia.tsx"></script>
-  </body>
+  </head>
+  <body><div id="root"></div></body>
 </html>

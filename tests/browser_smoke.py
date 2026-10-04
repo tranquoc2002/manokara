@@ -1,6 +1,7 @@
 """Real Chromium smoke test: pip install playwright; python -m playwright install chromium."""
 
 from pathlib import Path
+import os
 import socket
 import sys
 import tempfile
@@ -12,6 +13,7 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "outputs"))
 import manokara_server as backend
+from browser_cases import exercise_controller
 
 
 def main():
@@ -33,7 +35,8 @@ def main():
         errors, violations = [], []
         try:
             with sync_playwright() as playwright:
-                browser = playwright.chromium.launch()
+                browser = playwright.chromium.launch(executable_path=os.environ.get("MANOKARA_TEST_BROWSER") or None,
+                                                     args=["--autoplay-policy=no-user-gesture-required"])
                 controller = browser.new_context()
                 viewer = browser.new_context()
                 urls = []
@@ -64,6 +67,7 @@ def main():
                 page.locator("#add").click()
                 page.locator("#list [data-a='go']").click()
                 obs.wait_for_function("() => document.querySelector('#current').textContent === 'Browser smoke test'")
+                exercise_controller(page, obs, origin)
                 # Verify the bundled visualizer and its nested iframe receive viewer authentication.
                 page.locator("#lfx").select_option("folia-classic")
                 obs.wait_for_function("() => document.body.dataset.folia === 'on'")

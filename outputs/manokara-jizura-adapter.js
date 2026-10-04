@@ -8,12 +8,9 @@
   const inputKey=String(raw||'')+'|'+duration;
   if(inputKey===sourceKey)return sourceLrc;
   sourceKey=inputKey;
-  const parsed=J.parseLyrics(raw||'');
-  if(parsed.lines.some(x=>x.lrc!=null))return sourceLrc=String(raw||'');
-  const lines=parsed.lines.filter(x=>x.text);
-  if(!lines.length)return sourceLrc=String(raw||'');
-  const span=Math.max(1,Number(duration)||180),step=span/lines.length;
-  return sourceLrc=lines.map((line,i)=>{const t=i*step,m=Math.floor(t/60),s=(t%60).toFixed(2).padStart(5,'0');return `[${String(m).padStart(2,'0')}:${s}]${line.text}`}).join('\n');
+  const parsed=ManokaraCore.parseLyrics(raw,duration).lines;
+  if(!parsed.length)return sourceLrc='';
+  return sourceLrc=parsed.map(line=>{const t=Math.max(0,line.t),m=Math.floor(t/60),s=(t%60).toFixed(3).padStart(6,'0');return `[${String(m).padStart(2,'0')}:${s}]${line.x}`}).join('\n');
  }
  function makePlan(s,raw,key,shape){
   const seed=hash((s.title||'')+'|'+raw+(s.themeSeed?'|'+s.themeSeed:'')),p=J.defaultProject();
@@ -25,7 +22,7 @@
   p.centerFree=!!s.centerFree;p.centerDir=shape==='tall'?'tb':'lr';
   planKey=key;plan=J.plan(p);
   const themes={white:{fg:'#FFFFFF',sub:'#D1D5DB',accent:'#FFFFFF',accent2:'#CBD5E1'},cyan:{fg:'#67E8F9',sub:'#CFFAFE',accent:'#22D3EE',accent2:'#A5F3FC'},rose:{fg:'#FDA4AF',sub:'#FFE4E6',accent:'#FB7185',accent2:'#FBCFE8'},amber:{fg:'#FCD34D',sub:'#FEF3C7',accent:'#F59E0B',accent2:'#FDE68A'},violet:{fg:'#C4B5FD',sub:'#EDE9FE',accent:'#A78BFA',accent2:'#DDD6FE'},mint:{fg:'#6EE7B7',sub:'#D1FAE5',accent:'#34D399',accent2:'#A7F3D0'}};
-  const palette=themes[s.colorTheme];if(palette&&plan.style&&plan.style.schemes)plan.style.schemes=plan.style.schemes.map(sc=>Object.assign({},sc,palette,{ink:palette.fg,ghostA:palette.accent,ghostB:palette.accent2,grad:[palette.accent,palette.accent2]}));
+  const palette=themes[s.colorTheme];if(palette&&plan.style&&plan.style.schemes)plan.style={...plan.style,schemes:plan.style.schemes.map(sc=>Object.assign({},sc,palette,{ink:palette.fg,ghostA:palette.accent,ghostB:palette.accent2,grad:[palette.accent,palette.accent2]}))};
   if(p.centerFree&&plan.zones){
    for(const cut of plan.cuts){
     if(cut.line<0||cut.layout==='interlude'||!cut.zone||!cut.utext)continue;

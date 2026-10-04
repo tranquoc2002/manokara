@@ -208,12 +208,19 @@ On Windows use `.venv\Scripts\python.exe` and PowerShell `$env:MANOKARA_*` assig
 .venv/bin/python -m pip install playwright==1.63.0
 .venv/bin/python -m playwright install chromium
 .venv/bin/python tests/browser_smoke.py
+node --test tests/test_core.cjs
 ```
 
-The Chromium test starts and stops its own server with a temporary database. It checks login, live relay, cookie-free OBS, Folia/JIZURA, credential rotation, logout, and CSP violations. Add `--all-effects` to the Chromium command to check every bundled visualizer. External font/media providers still need to be reachable for their functionality.
+The Chromium test starts and stops its own server with a temporary database. It checks login, live relay, cookie-free OBS, Folia/JIZURA, credential rotation, logout, CSP, responsive layout, editing/reordering, countdown, pause, buffering, seeks, MC and stop. Playback regressions use a deterministic YouTube API fixture; they do not prove a particular public video permits embedding. Add `--all-effects` to check every bundled visualizer. Set `MANOKARA_TEST_BROWSER` to an installed Chromium/Edge executable to use it instead of downloading the test browser. Node is only needed for the shared-clock unit tests. External font/media providers still need to be reachable for their functionality.
+
+The output and Folia share one clock and one relay reader. Clock samples use server-reported age, so the controller and OBS devices can have different wall clocks. A disconnected clock extrapolates for at most 15 seconds. Browser background throttling and OBS source shutdown settings still apply; keep the OBS Browser Source active.
+
+Folia's hashed bundles use public immutable caching; HTML, credentials and relay state remain `no-store`. The Folia document is retained during normal playback. Switching to another Folia mode creates a separate document so Pixi renderers cannot retain references to another mode's destroyed textures.
 
 ## Source and notices
 
 The public `/sources/` URLs deliberately expose the bundled Folia source archive, its integration source, and third-party licenses/notices. Links are available from the login and controller pages. Keep them when deploying updates. Arbitrary directories, Python source, dotfiles, and symlinked files are not served. See the bundled Folia notice for upstream licensing and usage terms.
+
+To rebuild Folia, unpack the provided upstream source archive, copy `manokara-folia.tsx` and `manokara-folia.css` from `outputs/FOLIA-INTEGRATION-SOURCE` into `src/`, copy its HTML and Vite configuration into the upstream root, and copy `ObsWebSourceApp.tsx` into `src/components/obs/`. The shared `manokara-core.js` must be available in Vite's public directory. Install the upstream locked dependencies and run Vite with `vite.manokara.config.mts`. Copy the resulting `folia-assets` and generated module/preload/stylesheet tags into the output entry page, retaining its authenticated source bootstrap and shared-core script. Deploy the integration source alongside the generated bundles.
 
 Reference documentation: [Cloudflare named tunnels](https://developers.cloudflare.com/tunnel/features/locally-managed-tunnels/create-local-tunnel/), [Cloudflare private applications and Access](https://developers.cloudflare.com/cloudflare-one/setup/secure-private-apps/private-web-app/), [Uvicorn settings](https://uvicorn.dev/settings/), [Arch cloudflared package](https://archlinux.org/packages/extra/x86_64/cloudflared/), and [systemd service hardening](https://man.archlinux.org/man/systemd.exec.5.en).

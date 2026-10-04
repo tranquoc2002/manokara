@@ -211,7 +211,7 @@ def snapshot(payload):
                "effect": 32, "centerShape": 8, "colorTheme": 12}
     numbers = {"time": (-86400, 604800), "sampledAt": (0, 100_000_000_000_000),
                "countdownRemaining": (0, 60), "duration": (0, 604800), "size": (24, 160),
-               "themeSeed": (0, 4_294_967_295)}
+               "themeSeed": (0, 4_294_967_295), "timelineVersion": (0, 100_000_000_000_000)}
     booleans = set("ready playing paused counting mc transparent bold centerFree".split())
     if set(payload) - (strings.keys() | numbers.keys() | booleans):
         raise HTTPException(400, "Unknown lyric state field.")
@@ -241,7 +241,7 @@ def snapshot(payload):
 def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
-             "manokara-login.html", "manokara-login.js", "manokara-session.js"]
+             "manokara-login.html", "manokara-login.js", "manokara-session.js", "manokara-core.js"]
     result = {"/" + name: ROOT / name for name in names}
     for file in (ROOT / "folia-assets").iterdir():
         if file.suffix in (".js", ".css", ".png") and file.is_file():
@@ -249,7 +249,7 @@ def asset_manifest():
     # Explicit source/notice downloads; arbitrary files and the Python server are never assets.
     for name in ("FOLIA-MAJOR-SOURCE.zip", "FOLIA-MAJOR-LICENSE.txt", "FOLIA-MAJOR-NOTICE.txt", "JIZURA-LICENSE.txt", "JIZURA-THIRD-PARTY-NOTICES.md"):
         result["/sources/" + name] = ROOT / name
-    for name in ("manokara-folia.tsx", "manokara-folia.html", "manokara-folia.css"):
+    for name in ("manokara-folia.tsx", "manokara-folia.html", "manokara-folia.css", "vite.manokara.config.mts", "ObsWebSourceApp.tsx"):
         result["/sources/FOLIA-INTEGRATION-SOURCE/" + name] = ROOT / "FOLIA-INTEGRATION-SOURCE" / name
     return result
 
@@ -285,6 +285,7 @@ def csp_for(path):
 class SecurityHeaders:
     def __init__(self, app, settings, manifest):
         self.app, self.settings = app, settings
+        self.manifest_urls = set(manifest)
         self.policies = {url: csp_for(path) for url, path in manifest.items() if path.suffix == ".html"}
 
     async def __call__(self, scope, receive, send):
@@ -300,6 +301,10 @@ class SecurityHeaders:
                     b"content-security-policy": self.policies.get(scope["path"], csp_for(None)).encode(),
                     b"permissions-policy": b"camera=(), microphone=(), geolocation=()",
                 })
+                if (message["status"] == 200 and scope["path"].startswith("/folia-assets/")
+                        and scope["path"] in self.manifest_urls):
+                    # Public bundles are named by their content hash. Reuse them on mode changes.
+                    headers[b"cache-control"] = b"public, max-age=31536000, immutable"
                 if self.settings.secure:
                     headers[b"strict-transport-security"] = b"max-age=31536000"
                 message["headers"] = list(headers.items())
@@ -411,7 +416,12 @@ def create_app(settings=None):
             if not store.session(request.cookies.get(settings.cookie)) and not store.viewer(room_id, request.headers.get("authorization", "")):
                 raise HTTPException(401, "A valid OBS link or operator login is required.")
             limiter.check(("read", room_id), 40, 100)
-            return JSONResponse(live_room(room_id)["snapshot"])
+            room = live_room(room_id)
+            result = dict(room["snapshot"])
+            if "received_at" in room:
+                # Age comes from this process's monotonic clock, not either device's wall clock.
+                result["stateAgeMs"] = max(0, (time.monotonic() - room["received_at"]) * 1000)
+            return JSONResponse(result)
         digest = operator(request)
         limiter.check(("write", digest), 10, 30)
         store.room(room_id)
@@ -425,6 +435,7 @@ def create_app(settings=None):
             raise HTTPException(409, "Another window controls this room. Click the app to take control.")
         room["until"] = time.monotonic() + WRITER_SECONDS
         room["snapshot"] = {key: value for key, value in payload.items() if key != "writerId"}
+        room["received_at"] = time.monotonic()
         return JSONResponse({"ok": True})
 
     async def health(request):
@@ -432,14 +443,16 @@ def create_app(settings=None):
 
     async def assets(request):
         path = request.url.path
+        room = request.query_params.get("room", "")
+        suffix = "?room=" + room if ROOM_ID.fullmatch(room) else ""
         if path in ("/", "/manokara.html") and not store.session(request.cookies.get(settings.cookie)):
-            return RedirectResponse("/manokara-login.html", status_code=303)
+            return RedirectResponse("/manokara-login.html" + suffix, status_code=303)
         if path == "/":
-            return RedirectResponse("/manokara.html", status_code=303)
+            return RedirectResponse("/manokara.html" + suffix, status_code=303)
         file = manifest.get(path)
         if not file or not safe_asset(file):
             raise HTTPException(404, "Not found.")
-        media = "text/plain; charset=utf-8" if path.startswith("/sources/") and file.suffix in (".txt", ".md", ".tsx") else None
+        media = "text/plain; charset=utf-8" if path.startswith("/sources/") and file.suffix in (".txt", ".md", ".tsx", ".mts") else None
         return FileResponse(file, media_type=media)
 
     async def http_error(request, error):

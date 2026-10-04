@@ -260,3 +260,30 @@ def test_request_body_timeout_without_waiting_five_seconds(monkeypatch):
             await server.read_json(request)
         assert error.value.status_code == 408
     asyncio.run(run())
+
+
+def test_relay_reports_server_age_without_trusting_device_clock(client, app):
+    sign_in(client)
+    info = room(client)
+    endpoint = f'/__lyric-state?room={info["room"]}'
+    assert client.post(endpoint, json={"writerId": "writer-A", "ready": True, "time": 4,
+                                       "sampledAt": 1, "timelineVersion": 7}).status_code == 200
+    app.state.store.live[info["room"]]["received_at"] -= 2
+    state = client.get(endpoint).json()
+    assert 2000 <= state["stateAgeMs"] < 3000
+    assert state["time"] == 4 and state["timelineVersion"] == 7
+    assert client.post(endpoint, json={"writerId": "writer-A", "stateAgeMs": 0}).status_code == 400
+
+
+def test_login_redirect_preserves_valid_room_only(client):
+    valid = "a" * 32
+    assert client.get('/?room=' + valid).headers['location'] == '/manokara-login.html?room=' + valid
+    assert client.get('/?room=https://evil.example').headers['location'] == '/manokara-login.html'
+
+
+def test_public_hashed_bundles_cache_but_private_state_does_not(client):
+    asset = next(path for path in server.asset_manifest() if path.startswith('/folia-assets/') and path.endswith('.js'))
+    assert client.get(asset).headers['cache-control'] == 'public, max-age=31536000, immutable'
+    assert client.get('/manokara-obs.html').headers['cache-control'] == 'no-store'
+    assert client.get('/folia-assets/missing.js').headers['cache-control'] == 'no-store'
+    assert client.get('/sources/FOLIA-INTEGRATION-SOURCE/ObsWebSourceApp.tsx').status_code == 200

@@ -4,9 +4,12 @@ window.ManokaraSession = (() => {
   const api = async (path, payload, options = {}) => {
     const response = await fetch(path, {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload), credentials: "same-origin", ...options,
+      body: JSON.stringify(payload), credentials: "same-origin", signal: AbortSignal.timeout(8000), ...options,
     });
-    if (response.status === 401) location.replace("/manokara-login.html");
+    if (response.status === 401) {
+      const room = new URL(location.href).searchParams.get("room");
+      location.replace("/manokara-login.html" + (/^[a-f0-9]{32}$/.test(room || "") ? "?room=" + room : ""));
+    }
     return response;
   };
   const ready = (async () => {
