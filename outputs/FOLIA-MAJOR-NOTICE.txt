@@ -1,0 +1,15 @@
+Folia Major visualizer integration
+
+Upstream project: https://github.com/chthollyphile/folia-major
+Upstream license: GNU Affero General Public License v3.0 (AGPL-3.0)
+Copyright: chthollyphile and the Folia contributors
+
+The Manokara Folia output bundles the upstream Folia visualizer renderers. The upstream source
+archive is provided as FOLIA-MAJOR-SOURCE.zip; the license is in FOLIA-MAJOR-LICENSE.txt. The
+Manokara bridge/build source is in FOLIA-INTEGRATION-SOURCE, and the browser bundle is in
+folia-assets with its entry page at manokara-folia.html.
+
+The Folia repository README describes the project/source as intended for personal learning,
+technical exchange, and non-profit testing, and asks users not to use it for commercial profit.
+This integration is intended for local personal karaoke/OBS use. Preserve these notices and review
+AGPL-3.0 obligations before redistributing or exposing a combined Manokara/Folia service to others.

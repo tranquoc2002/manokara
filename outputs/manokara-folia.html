@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manokara · Folia visualizers</title>
+    <link rel="icon" href="./manokara.ico">
+    <script>
+      (() => {
+        const nativeFetch = window.fetch.bind(window);
+        let trackKey = '', stableTime = 0, stableEffect = '', pendingEffect = '', pendingEffectAt = 0, wasPlaying = false;
+        window.fetch = async (...args) => {
+          const requestUrl = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+          const parsedUrl = new URL(requestUrl, location.href);
+          if (parsedUrl.pathname === '/__lyric-state') {
+            const room = new URL(location.href).searchParams.get('room');
+            if (room) { parsedUrl.searchParams.set('room', room); args[0] = parsedUrl.href; }
+          }
+          const response = await nativeFetch(...args);
+          try {
+            if (new URL(requestUrl, location.href).pathname !== '/__lyric-state') return response;
+            const snapshot = await response.clone().json();
+            if (!snapshot || typeof snapshot !== 'object' || snapshot.ready !== true) return response;
+            const nextEffect = String(snapshot.effect || 'clean');
+            if (!stableEffect) stableEffect = nextEffect;
+            else if (nextEffect === stableEffect) {
+              pendingEffect = '';
+              pendingEffectAt = 0;
+            } else if (nextEffect !== pendingEffect) {
+              pendingEffect = nextEffect;
+              pendingEffectAt = performance.now();
+            } else if (performance.now() - pendingEffectAt >= 500) {
+              stableEffect = nextEffect;
+              pendingEffect = '';
+              pendingEffectAt = 0;
+            }
+            snapshot.effect = stableEffect;
+            const nextTrack = [snapshot.title || '', snapshot.lrc || '', snapshot.duration || 0].join('|');
+            let nextTime = Number(snapshot.time) || 0;
+            const isPlaying = !!snapshot.playing && !snapshot.paused;
+            if (nextTrack !== trackKey || !isPlaying || !wasPlaying) {
+              trackKey = nextTrack;
+              stableTime = nextTime;
+            } else if (nextTime < stableTime && stableTime - nextTime <= 0.35) {
+              nextTime = stableTime;
+            } else {
+              stableTime = nextTime;
+            }
+            wasPlaying = isPlaying;
+            snapshot.time = nextTime;
+            return new Proxy(response, {
+              get(target, property) {
+                if (property === 'json') return async () => snapshot;
+                const value = Reflect.get(target, property, target);
+                return typeof value === 'function' ? value.bind(target) : value;
+              }
+            });
+          } catch (_) {
+            return response;
+          }
+        };
+      })();
+    </script>
+    <script type="module" crossorigin src="./folia-assets/manokara-folia-CP_NdTTA.js"></script>
+    <link rel="modulepreload" crossorigin href="./folia-assets/rolldown-runtime-hePW80VL.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/x-BV_1GJnz.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/react-dom-CMrkT_EO.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/appPlaybackHelpers-DWjIMh62.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/preload-helper-uBIymjUX.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/colorMix-BxoitSzb.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/dioramaMoteField-XTZp_Kf0.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/temperaLayerImages-f1Lo5I3z.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/useStatusMessageStore-cqmaGYEO.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/temperaRandom-Cj3v-sKs.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/temperaImageLayer-ChlJMzuD.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/alternateText-BieoZVFZ.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/harmonyRuntime-eyEnngah.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/fontStacks-BnJBkWk9.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/graphemeTiming-BhIjEJVM.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/layout-B9QX0GDF.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/rich-inline-CSl-nZmG.js">
+    <link rel="modulepreload" crossorigin href="./folia-assets/subtitleTrackStyle-B8nybXX5.js">
+    <link rel="stylesheet" crossorigin href="./folia-assets/manokara-folia-C4ZK2Ztp.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

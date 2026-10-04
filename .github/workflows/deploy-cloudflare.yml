@@ -1,0 +1,37 @@
+name: Deploy Manokara to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "outputs/**"
+      - "cloudflare-worker.js"
+      - "wrangler.toml"
+      - ".github/workflows/deploy-cloudflare.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Assemble public site files
+        shell: bash
+        run: |
+          mkdir -p public/folia-assets
+          cp outputs/manokara.html outputs/manokara-obs.html outputs/manokara-folia.html public/
+          cp outputs/manokara.ico outputs/manokara-effects.css outputs/manokara-effects.js public/
+          cp outputs/manokara-jizura.js outputs/manokara-jizura-adapter.js public/
+          cp -R outputs/folia-assets/. public/folia-assets/
+
+      - name: Deploy Worker, static assets, and lyric relay
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

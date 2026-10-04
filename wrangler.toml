@@ -1,0 +1,16 @@
+name = "manokara-web"
+main = "cloudflare-worker.js"
+compatibility_date = "2026-10-04"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/__lyric-state*", "/__lyric-owner*"]
+
+[[durable_objects.bindings]]
+name = "LYRIC_ROOMS"
+class_name = "LyricRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LyricRoom"]

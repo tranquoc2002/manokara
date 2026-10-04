@@ -1,0 +1,1 @@
+import{_ as e}from"./appPlaybackHelpers-DWjIMh62.js";var t=e(e=>({message:null,setMessage:t=>e(e=>({message:typeof t==`function`?t(e.message):t}))})),n=e=>{t.getState().setMessage(e)};export{n as t};

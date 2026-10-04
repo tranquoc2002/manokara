@@ -1,0 +1,22 @@
+.fx-word{display:inline-block;white-space:pre}
+.fx-clean{animation:mk-fade-up .48s cubic-bezier(.2,.8,.2,1) both}
+.fx-word-pop .fx-word{animation:mk-word-pop .56s cubic-bezier(.18,.9,.28,1.2) both}
+.fx-neon .fx-word{animation:mk-neon .8s ease-out both}
+.fx-glitch .fx-word{animation:mk-glitch .44s steps(2,end) both}
+.fx-word,.fx-char{position:relative;will-change:transform,opacity,filter}
+.fx-tempera .fx-word{animation:mk-tempera .7s cubic-bezier(.2,.75,.25,1) both;text-shadow:0 .035em 0 #fff,0 .08em .12em #111}
+.fx-sonnet .fx-word{animation:mk-sonnet .95s cubic-bezier(.2,.8,.2,1) both;text-shadow:0 0 .12em currentColor}
+.fx-lumiere .fx-word{animation:mk-lumiere 1.15s cubic-bezier(.18,.65,.25,1) both;text-shadow:0 0 .18em currentColor,0 0 .42em currentColor}
+.fx-hanabi .fx-char{animation:mk-hanabi .78s cubic-bezier(.16,.85,.24,1.3) both;animation-delay:calc(var(--i,0)*24ms);text-shadow:0 0 .12em currentColor,0 .035em .08em #111}
+.fx-tempera .fx-word:nth-child(odd){--tilt:-2.4deg}.fx-tempera .fx-word:nth-child(even){--tilt:2deg}
+.fx-lumiere .fx-word::after{content:"";position:absolute;left:-.16em;right:-.16em;top:52%;height:.08em;background:currentColor;opacity:0;filter:blur(.13em);transform:scaleX(0);transform-origin:left;animation:mk-ray .75s ease-out both;animation-delay:inherit;pointer-events:none}
+@keyframes mk-tempera{0%{opacity:0;transform:translateY(.28em) rotate(var(--tilt,0)) scale(.88);filter:blur(3px)}65%{opacity:1;transform:translateY(-.04em) rotate(0) scale(1.035);filter:blur(0)}100%{opacity:1;transform:none;filter:none}}
+@keyframes mk-sonnet{0%{opacity:0;transform:translateY(.5em) scale(.92);filter:blur(.22em)}45%{opacity:.45;filter:blur(.08em)}100%{opacity:1;transform:none;filter:none}}
+@keyframes mk-lumiere{0%{opacity:0;clip-path:inset(0 100% 0 0);filter:brightness(2.8) blur(.14em);transform:translateX(-.16em)}48%{opacity:1;filter:brightness(1.8) blur(0)}100%{opacity:1;clip-path:inset(0);filter:brightness(1);transform:none}}
+@keyframes mk-ray{0%{opacity:0;transform:scaleX(0)}35%{opacity:.75}100%{opacity:0;transform:scaleX(1)}}
+@keyframes mk-hanabi{0%{opacity:0;transform:translate(var(--dx,0),.42em) scale(.15) rotate(-22deg);filter:blur(.12em)}65%{opacity:1;transform:translate(0,-.08em) scale(1.28) rotate(5deg);filter:blur(0)}100%{opacity:1;transform:none;filter:none}}
+@keyframes mk-fade-up{from{opacity:0;transform:translateY(.35em) scale(.98);filter:blur(5px)}to{opacity:1;transform:none;filter:blur(0)}}
+@keyframes mk-word-pop{0%{opacity:0;transform:translateY(.7em) scale(.72);filter:blur(5px)}65%{opacity:1;transform:translateY(-.08em) scale(1.08);filter:blur(0)}100%{transform:none}}
+@keyframes mk-neon{0%{opacity:0;filter:brightness(2.8);text-shadow:0 0 .9em currentColor;transform:translateX(-.18em)}45%{opacity:1;filter:brightness(1.8);text-shadow:0 0 .55em currentColor}100%{filter:none;text-shadow:0 0 .12em currentColor;transform:none}}
+@keyframes mk-glitch{0%{opacity:0;transform:translateX(.12em);text-shadow:-.08em 0 #00e5ff,.08em 0 #ff2d95;clip-path:inset(40% 0 50%)}35%{opacity:1;transform:translateX(-.04em);clip-path:inset(0)}65%{text-shadow:.04em 0 #00e5ff,-.04em 0 #ff2d95}100%{transform:none;text-shadow:0 0 .12em currentColor;clip-path:inset(0)}}
+@media(prefers-reduced-motion:reduce){.fx-clean,.fx-word-pop .fx-word,.fx-neon .fx-word,.fx-glitch .fx-word,.fx-tempera .fx-word,.fx-sonnet .fx-word,.fx-lumiere .fx-word,.fx-lumiere .fx-word::after,.fx-hanabi .fx-char{animation:none!important;opacity:1;filter:none;transform:none;clip-path:none}}

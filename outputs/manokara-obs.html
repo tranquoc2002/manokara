@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manokara OBS Lyrics</title>
+<link rel="icon" href="./manokara.ico">
+<link rel="stylesheet" href="./manokara-effects.css?v=2">
+<style>
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden}
+body{background:transparent;color:#fff;font:800 64px/1.15 system-ui,"Yu Gothic",sans-serif;text-align:center;text-shadow:0 0 6px #000,0 0 6px #000}
+#out{height:100%;width:100%;padding:0 4%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:.4em}
+#previous{font-size:.55em;opacity:.55}
+#current{font-size:1em;overflow-wrap:anywhere}
+#count{font-size:1.5em;line-height:1}
+body[data-center-free="on"] #out{padding:0}
+body[data-center-free="on"][data-center-shape="wide"] #current,body[data-center-free="on"][data-center-shape="wide"] #previous{position:fixed;z-index:5;top:0;height:100vh;width:36vw;max-width:36vw;padding:2vw;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;overflow-wrap:anywhere}
+body[data-center-free="on"][data-center-shape="wide"] #current[data-zone="left"],body[data-center-free="on"][data-center-shape="wide"] #previous[data-zone="left"]{left:0;right:auto}
+body[data-center-free="on"][data-center-shape="wide"] #current[data-zone="right"],body[data-center-free="on"][data-center-shape="wide"] #previous[data-zone="right"]{right:0;left:auto}
+body[data-center-free="on"][data-center-shape="tall"] #current,body[data-center-free="on"][data-center-shape="tall"] #previous{position:fixed;z-index:5;left:0;width:100vw;height:33vh;padding:2vh 4vw;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;overflow-wrap:anywhere}
+body[data-center-free="on"][data-center-shape="tall"] #current[data-zone="top"],body[data-center-free="on"][data-center-shape="tall"] #previous[data-zone="top"]{top:0;bottom:auto}
+body[data-center-free="on"][data-center-shape="tall"] #current[data-zone="bottom"],body[data-center-free="on"][data-center-shape="tall"] #previous[data-zone="bottom"]{bottom:0;top:auto}
+#jizuraCanvas{position:fixed;inset:0;z-index:2;width:100vw;height:100vh;display:none}
+body[data-jizura="on"] #out{display:none}
+#foliaFrame{position:fixed;inset:0;z-index:3;width:100vw;height:100vh;border:0;display:none;background:transparent}
+body[data-folia="on"] #out,body[data-folia="on"] #jizuraCanvas{display:none!important}
+body[data-folia="on"] #foliaFrame{display:block}
+</style>
+</head>
+<body><main id="out"><div id="previous"></div><div id="current">Waiting for Manokara…</div><div id="count"></div></main><canvas id="jizuraCanvas"></canvas><iframe id="foliaFrame" title="Folia lyric visualizer" allow="autoplay"></iframe>
+<script src="./manokara-effects.js?v=2"></script>
+<script src="./manokara-jizura.js?v=full"></script>
+<script src="./manokara-jizura-adapter.js?v=random-style-1"></script>
+<script>
+const $=s=>document.querySelector(s);
+const jizuraCanvas=$('#jizuraCanvas');
+const foliaFrame=$('#foliaFrame');
+const themes={white:{color:'#FFFFFF',filter:'grayscale(1) brightness(1.12)'},cyan:{color:'#67E8F9',filter:'sepia(1) saturate(3.4) hue-rotate(145deg)'},rose:{color:'#FDA4AF',filter:'sepia(1) saturate(3.2) hue-rotate(320deg)'},amber:{color:'#FCD34D',filter:'sepia(1) saturate(3.8) hue-rotate(350deg)'},violet:{color:'#C4B5FD',filter:'sepia(1) saturate(4) hue-rotate(230deg)'},mint:{color:'#6EE7B7',filter:'sepia(1) saturate(3.2) hue-rotate(105deg)'}};
+const relayRoom=new URL(location.href).searchParams.get('room')||'';
+const relayStateUrl=()=>{const url=new URL('/__lyric-state',location.href);if(relayRoom)url.searchParams.set('room',relayRoom);return url.href};
+let state=null,parsedKey='',lines=[],lastTextKey='',pollPending=false,loadedFontHref='',appliedEffect='',pendingEffect='',pendingEffectAt=0;
+function settledEffect(value){const next=String(value||'clean');if(!appliedEffect){appliedEffect=pendingEffect=next;return next}if(next===appliedEffect){pendingEffect='';pendingEffectAt=0;return appliedEffect}if(next!==pendingEffect){pendingEffect=next;pendingEffectAt=performance.now();return appliedEffect}if(performance.now()-pendingEffectAt>=500){appliedEffect=next;pendingEffect='';pendingEffectAt=0}return appliedEffect}
+function googleFontHref(value){
+ const [family,...parts]=String(value||'').split(':');
+ const name=family.trim(),variant=parts.join(':');
+ if(!name||variant&&!/^[\w;@_-]+$/.test(variant))return'';
+ return 'https://fonts.googleapis.com/css2?family='+encodeURIComponent(name).replace(/%20/g,'+')+(variant?':'+variant:'')+'&display=swap';
+}
+function syncFont(s){
+ const href=googleFontHref(s.googleFont),old=document.getElementById('manokara-google-font');
+ if(!href){if(old)old.remove();loadedFontHref='';return}
+ if(href===loadedFontHref)return;
+ const link=old||document.createElement('link');link.id='manokara-google-font';link.rel='stylesheet';link.href=href;
+ if(!old)document.head.appendChild(link);loadedFontHref=href;
+}
+function centerShape(s){const m=s.centerShape||'auto';return m==='auto'?(innerHeight>innerWidth*1.1?'tall':'wide'):m}
+function lineState(s){
+ if(s.counting||s.mc||!s.title)return{current:'',previous:'',index:0};
+ const key=(s.lrc||'')+'|'+s.duration;
+ if(key!==parsedKey){parsedKey=key;lines=parseLyrics(s.lrc,s.duration)}
+ let t=Number(s.time)||0;if(s.playing&&!s.paused)t+=Math.max(0,(Date.now()-(Number(s.sampledAt)||Date.now()))/1000);
+ let i=-1;for(let j=0;j<lines.length&&lines[j].t<=t;j++)i=j;
+ return{current:i>=0?lines[i].x:'',previous:i>0?lines[i-1].x:'',index:Math.max(0,i)}
+}
+function zoneFor(i,shape){return shape==='tall'?(i%2?'bottom':'top'):(i%2?'right':'left')}
+const foliaCenterTargets=[
+ {effects:['classic','cadenza','partita','diorama','tilt'],selector:'#root div[class*="h-[70vh]"][class*="pointer-events-none"]'},
+ {effects:['cappella'],selector:'#root div[class*="relative z-10 flex h-full w-full items-start justify-center"]'},
+ {effects:['still'],selector:'#root div[class*="absolute inset-0 z-0 flex flex-col items-center justify-center"]'},
+];
+function makeFoliaCenterCSS(){
+ const css=[];
+ for(const target of foliaCenterTargets)for(const effect of target.effects){
+  const root=`html[data-mk-effect="${effect}"][data-mk-center-free="on"]`;
+  for(const zone of ['left','right']){
+   const side=zone==='left'?'0 auto 0 0':'0 0 0 auto';
+   const scoped=`${root}[data-mk-shape="wide"][data-mk-zone="${zone}"] ${target.selector}`;
+   css.push(`${scoped}{position:fixed!important;inset:${side}!important;width:36vw!important;height:100vh!important;max-width:36vw!important;padding:2vw!important;z-index:20!important;overflow:hidden!important}`);
+   css.push(`${scoped},${scoped} *{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important}`);
+   css.push(`${scoped} [class~="whitespace-nowrap"]{max-width:100%!important;min-width:0!important}`);
+  }
+  for(const zone of ['top','bottom']){
+   const edge=zone==='top'?'0 0 auto 0':'auto 0 0 0';
+   const scoped=`${root}[data-mk-shape="tall"][data-mk-zone="${zone}"] ${target.selector}`;
+   css.push(`${scoped}{position:fixed!important;inset:${edge}!important;width:100vw!important;height:33vh!important;max-width:none!important;padding:2vh 4vw!important;z-index:20!important;overflow:hidden!important}`);
+   css.push(`${scoped},${scoped} *{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important}`);
+   css.push(`${scoped} [class~="whitespace-nowrap"]{max-width:100%!important;min-width:0!important}`);
+  }
+ }
+ return css.join('');
+}
+const foliaCenterCSS=makeFoliaCenterCSS();
+function syncFoliaCenter(s,shape,zone){
+ try{const d=foliaFrame.contentDocument;if(!d)return;const root=d.documentElement;const values={mkCenterFree:s.centerFree&&!s.counting&&!s.mc&&!!s.lrc?'on':'off',mkShape:shape,mkZone:zone,mkEffect:String(s.effect||'').replace(/^folia-/,'')};for(const [k,v] of Object.entries(values))if(root.dataset[k]!==v)root.dataset[k]=v;let st=d.getElementById('manokara-center-free-style');if(!st){st=d.createElement('style');st.id='manokara-center-free-style';d.head.appendChild(st)}const color=s.background||'#00ff00';const bgRule=s.transparent!==false?'html,body,#root,#root>div{background-color:transparent!important}':`html,body,#root,#root>div{background-color:${color}!important}`;const css=foliaCenterCSS+bgRule;if(st.textContent!==css)st.textContent=css}catch(e){}
+}
+foliaFrame.addEventListener('load',()=>{if(state){const effect=settledEffect(state.effect);syncFoliaCenter(effect===state.effect?state:{...state,effect},centerShape(state),zoneFor(lineState(state).index,centerShape(state)))}});
+function parseLyrics(raw,duration){
+ const out=[];let timed=false;
+ String(raw||'').split(/\r?\n/).forEach(line=>{
+  const stamps=[...line.matchAll(/\[(\d+):(\d{2}(?:\.\d+)?)\]/g)];
+  const text=line.replace(/\[[^\]]*\]|<[^>]*>/g,'').trim();
+  if(stamps.length){timed=true;stamps.forEach(m=>out.push({t:+m[1]*60+parseFloat(m[2]),x:text}))}
+  else if(text)out.push({t:null,x:text});
+ });
+ if(!timed){const span=Math.max(1,Number(duration)||180);out.forEach((item,i)=>item.t=i*span/out.length)}
+ return out.filter(item=>item.t!=null).sort((a,b)=>a.t-b.t);
+}
+function render(){
+ const s=state;
+ if(!s){return}
+ const effect=settledEffect(s.effect),renderState=effect===s.effect?s:{...s,effect},root=document.documentElement,body=document.body,out=$('#out');
+ const shape=centerShape(s),ls=lineState(s),activeZone=zoneFor(ls.index,shape),centerOn=s.centerFree&&!s.counting&&!s.mc&&!!s.lrc;
+ body.dataset.centerFree=centerOn?'on':'off';body.dataset.centerShape=shape;
+ $('#current').dataset.zone=activeZone;$('#previous').dataset.zone=zoneFor(ls.index-1,shape);
+ const theme=themes[s.colorTheme];body.style.background=s.transparent===false?(s.background||'#00ff00'):'transparent';body.style.color=theme?.color||s.foreground||'#ffffff';foliaFrame.style.background=s.transparent===false?(s.background||'#00ff00'):'transparent';foliaFrame.style.filter=theme?.filter||'none';
+ body.style.fontFamily=s.font||'system-ui,"Yu Gothic",sans-serif';body.style.fontWeight=s.bold===false?400:800;
+ body.style.fontSize=Math.max(24,Math.min(160,Number(s.size)||64))+'px';
+ syncFont(s);
+ const foliaMode=effect.startsWith('folia-');
+ if(foliaMode){
+  body.dataset.folia='on';jizuraCanvas.style.display='none';body.dataset.jizura='off';
+  if(foliaFrame.dataset.mode!==effect){foliaFrame.dataset.active='1';foliaFrame.dataset.mode=effect;foliaFrame.src='./manokara-folia.html?mode='+encodeURIComponent(effect)+'&mk=folia-stable-1'+(relayRoom?'&room='+encodeURIComponent(relayRoom):'')}
+  syncFoliaCenter(renderState,shape,activeZone);
+  return;
+ }
+ body.dataset.folia='off';
+ if(effect==='jizura'&&window.ManokaraJizura){
+  if(window.ManokaraJizura.draw(jizuraCanvas,s)){jizuraCanvas.style.display='block';body.dataset.jizura='on';return}
+ }
+ jizuraCanvas.style.display='none';body.dataset.jizura='off';
+ let current=ls.current,previous=ls.previous,count='';
+ if(s.counting){
+  current=s.title||'';
+  const age=s.paused?0:Math.max(0,(Date.now()-(Number(s.sampledAt)||Date.now()))/1000);
+  const remaining=Math.max(0,(Number(s.countdownRemaining)||0)-age);
+  count=String(Math.max(1,Math.ceil(remaining)));
+ }else if(s.mc){
+  current=s.memo||'🎙';
+ }
+ $('#previous').textContent=previous;$('#count').textContent=count;
+ const shown=current||'';
+ const textKey=[s.title||'',shown,count,s.mc?'mc':'',s.counting?'count':'',effect].join('|');
+ const currentNode=$('#current');
+ if(textKey!==lastTextKey){currentNode.textContent=shown;window.ManokaraLyricFX.play(currentNode,shown,effect);lastTextKey=textKey}
+}
+async function poll(){
+ if(pollPending)return;
+ pollPending=true;
+ try{const r=await fetch(relayStateUrl(),{cache:'no-store'});if(r.ok){const next=await r.json();if(next&&next.ready!==false){state=next;render()}}}catch(e){}
+ finally{pollPending=false}
+}
+poll();setInterval(poll,200);setInterval(render,50);
+</script>
+</body>
+</html>
