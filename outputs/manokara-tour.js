@@ -120,7 +120,7 @@
     schedule();
   }
   function revealTarget() {
-    const step=steps[index];if(step.tab)adapter.showTab(step.tab);
+    const step=steps[index];adapter.showMain?.('karaoke');if(step.tab)adapter.showTab(step.tab);
     if(step.details)$(step.details).open=true;
     const target=$(step.target);if(!target)return;
     target.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
@@ -161,8 +161,8 @@
   function open() {
     if(active)return;
     if(!$('#transposeDialog').hidden)$('#transposeClose').click();
-    const background=[...document.querySelectorAll('.app-header,#grid,.app-footer')];
-    saved={focus:document.activeElement,tab:$('#panel-song').hidden?'output':'song',
+    const background=[...document.querySelectorAll('.app-header,.main-tabs,#grid,#playlistStudio,.app-footer')];
+    saved={focus:document.activeElement,main:adapter.main?.()||'karaoke',tab:$('#panel-song').hidden?'output':'song',
       details:[...document.querySelectorAll('main details')].map(node=>({node,open:node.open})),
       scroll:[...document.querySelectorAll('main,main *')].filter(node=>node.scrollHeight>node.clientHeight||node.scrollWidth>node.clientWidth).map(node=>({node,top:node.scrollTop,left:node.scrollLeft})),
       x:scrollX,y:scrollY,background:background.map(node=>({node,inert:node.inert}))};
@@ -177,7 +177,7 @@
     cancelAnimationFrame(frame);frame=0;
     document.removeEventListener('keydown',keydown,true);document.removeEventListener('scroll',schedule,true);
     window.removeEventListener('resize',resize);window.visualViewport?.removeEventListener('resize',resize);window.visualViewport?.removeEventListener('scroll',schedule);
-    saved.details.forEach(({node,open})=>node.open=open);adapter.showTab(saved.tab);
+    saved.details.forEach(({node,open})=>node.open=open);adapter.showTab(saved.tab);adapter.showMain?.(saved.main);
     saved.background.forEach(({node,inert})=>node.inert=inert);
     saved.scroll.forEach(({node,top,left})=>{node.scrollTop=top;node.scrollLeft=left});window.scrollTo({left:saved.x,top:saved.y,behavior:'instant'});
     const restore=saved.focus?.isConnected?saved.focus:$('#help');restore.focus({preventScroll:true});

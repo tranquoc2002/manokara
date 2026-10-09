@@ -11,6 +11,8 @@
 <link rel="stylesheet" href="./manokara-ui.css">
 <link rel="stylesheet" href="./manokara-tour.css">
 <link rel="stylesheet" href="./manokara-search.css">
+<link rel="stylesheet" href="./manokara-studio.css">
+<link rel="stylesheet" href="./manokara-playlist.css">
 </head>
 <body>
 <a class="skip-link" href="#grid">Skip to studio</a>
@@ -37,6 +39,7 @@
     <button class="s" id="theme" title="Switch between light and dark theme" aria-label="Switch color theme"><span data-icon="circle-half" aria-hidden="true"></span><span>Theme</span></button>
   </div>
 </header>
+<nav class="main-tabs" role="tablist" aria-label="Main workspace"><button id="main-karaoke" role="tab" data-main-tab="karaoke" aria-controls="grid" aria-selected="true">Karaoke</button><button id="main-playlist" role="tab" data-main-tab="playlist" aria-controls="playlistStudio" aria-selected="false" tabindex="-1">Playlist</button></nav>
 <div id="transposeDialog" class="modal-backdrop" hidden role="presentation"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="transposeTitle">
   <span class="eyebrow">Pitch, speed &amp; loops</span><h2 id="transposeTitle">Make it your key.</h2>
   <p>Transpose is a browser extension for pitch, speed, and loops. Install it in the browser profile you use for Manokara.</p>
@@ -45,7 +48,7 @@
   <div class="row"><button id="transposeInstall">Install Transpose<span data-icon="arrow-up-right" aria-hidden="true"></span></button><button class="s" id="transposeOpen">Open Manokara window</button><button class="ghost" id="transposeClose">Close</button></div><small id="transposeStatus" role="status"></small>
 </section></div>
 <div id="warn" hidden><b>Open Manokara through its configured server URL.</b> The lyric relay requires the Python server. See DEPLOY.md for setup.</div>
-<main id="grid" tabindex="-1">
+<main id="grid" tabindex="-1" role="tabpanel" aria-labelledby="main-karaoke">
   <aside class="card" id="setlistSide" aria-labelledby="setlistTitle">
     <div class="section-head"><div class="section-title"><h2 id="setlistTitle">Setlist</h2><span class="count" id="setlistCount">0</span></div><button class="ghost icon-button" data-open-song title="Add a song" aria-label="Add a song"><span data-icon="plus" aria-hidden="true"></span></button></div>
     <div id="setlistEmpty" class="empty-setlist"><div class="empty-icon"><span data-icon="playlist" aria-hidden="true"></span></div><p>Every set starts somewhere.</p><small>Add your first song, then make the evening yours.</small><button class="s" data-open-song><span data-icon="plus" aria-hidden="true"></span>Add a song</button></div>
@@ -86,6 +89,7 @@
         <div class="output-connect"><div><h2>Take your lyrics live.</h2><p>Your own output for OBS or a second screen.</p></div><button class="s" id="lwin"><span data-icon="arrow-up-right" aria-hidden="true"></span>Open lyrics window</button></div>
         <label class="field"><span>OBS Browser Source URL</span><div class="obs-link"><input id="obsurl" readonly value="Connecting…" aria-label="OBS Browser Source URL"><button id="copyobs"><span data-icon="link" aria-hidden="true"></span>Copy link</button></div></label>
         <div class="obs-note"><small>Paste this into an OBS Browser Source. Keep it active.</small><button class="ghost" id="rotateobs" title="Revoke the previous OBS link and create a new one">Replace link</button></div>
+        <button class="s" id="editLyricLayout">Edit lyric layout</button>
         <section class="section-divider" aria-label="Output appearance"><h3>A style for your sound</h3><div class="settings-grid">
           <label class="field wide"><span>Visual style</span><select id="lfx"><option value="jizura">JIZURA Auto · full effects</option><optgroup label="Folia Major · original visualizers"><option value="folia-classic">Folia · Luminous</option><option value="folia-cadenza">Folia · Mindscape</option><option value="folia-partita">Folia · Cloud Steps</option><option value="folia-fume">Folia · Fume</option><option value="folia-cappella">Folia · Cappella</option><option value="folia-tilt">Folia · Tilt</option><option value="folia-claddagh">Folia · Claddagh</option><option value="folia-monet">Folia · Monet</option><option value="folia-diorama">Folia · Diorama</option><option value="folia-pendolo">Folia · Pendolo</option><option value="folia-sonnet">Folia · Sonnet</option><option value="folia-tempera">Folia · Tempera</option><option value="folia-lumiere">Folia · Lumiere</option></optgroup><option value="tempera">Tempera · ink</option><option value="sonnet">Sonnet · kinetic focus</option><option value="lumiere">Lumiere · light reveal</option><option value="hanabi">Hanabi · character burst</option><option value="clean">Clean fade</option><option value="word-pop">Word pop</option><option value="neon">Neon sweep</option><option value="glitch">Glitch hit</option></select></label>
           <label class="field"><span>Background</span><select id="lbgmode"><option value="transparent">Transparent</option><option value="green">Green screen</option></select></label><label class="field"><span>Color palette</span><select id="ltheme"><option value="effect">Effect palette</option><option value="white">White</option><option value="cyan">Ice cyan</option><option value="rose">Rose</option><option value="amber">Amber</option><option value="violet">Violet</option><option value="mint">Mint</option></select></label>
@@ -103,6 +107,7 @@
     <div class="lyrics-footer"><div class="sync-head"><span>Live sync</span><b id="offv" title="Current live sync offset">Sync: 0.0 s</b></div><div class="sync-buttons"><button class="s" id="lm">−0.5 s</button><button class="s" id="lp">+0.5 s</button><button class="ghost" id="lz">Reset</button></div><small id="offh">Nudge the words to match what you hear. + shows lines earlier; − shows them later.</small><div class="timing-action"><button class="ghost" id="tap"><span data-icon="clock" aria-hidden="true"></span>Set line time</button><kbd>T</kbd></div></div>
   </aside>
 </main>
+<section id="playlistStudio" role="tabpanel" aria-labelledby="main-playlist" hidden></section>
 <footer class="app-footer"><span>Sing your way. Your setlist, your room.</span><details><summary>Credits &amp; licenses<span data-icon="caret-right" aria-hidden="true"></span></summary><div class="credits-links"><a href="/sources/FOLIA-MAJOR-NOTICE.txt">Folia notices</a><a href="/sources/FOLIA-MAJOR-SOURCE.zip">Folia source</a><a href="/sources/FOLIA-INTEGRATION-SOURCE/manokara-folia.tsx">Integration source</a><a href="/sources/JIZURA-LICENSE.txt">JIZURA license</a><a href="/romaji-assets/NOTICES.txt">Romaji notices</a><a href="/ui-assets/NOTICES.txt">Interface fonts &amp; icons</a></div></details></footer>
 
 <script src="./manokara-i18n.js"></script>
@@ -113,6 +118,8 @@
 <script src="./manokara-lyrics.js"></script>
 <script src="./manokara-lyrics-editor.js"></script>
 <script src="./manokara-session.js"></script>
+<script src="./manokara-overlay.js"></script>
+<script src="./manokara-studio.js"></script>
 <script>
 const uiText=ManokaraI18n.text,uiMarkup=ManokaraI18n.markup;
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -122,6 +129,7 @@ const stageEmptySource=$('#stage').innerHTML;
 const stageEmpty=()=>ManokaraI18n.html(stageEmptySource);
 function updateWorkspaceScroll(){const panel=document.querySelector('.tabpanel:not([hidden])');document.querySelector('.workspace-hint').hidden=!panel||panel.scrollHeight<=panel.clientHeight+panel.scrollTop+12}
 function showStudioTab(name){
+ window.ManokaraStudio?.showMain('karaoke');
  const song=name==='song';$('#panel-song').hidden=!song;$('#panel-green').hidden=song;
  [$('#tab-song'),$('#tab-output')].forEach((button,i)=>{const selected=i===(song?0:1);button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1});
  requestAnimationFrame(updateWorkspaceScroll);
@@ -151,7 +159,7 @@ const msg=value=>{messageSource=value||'';$('#msg').textContent=uiText(messageSo
 const lyricEditor=ManokaraLyricsEditor.create({imported(metadata){pickDur=metadata.duration;if(!$('#ttl').value&&metadata.title)$('#ttl').value=metadata.title.slice(0,512);if(!$('#lq').value)$('#lq').value=[metadata.title,metadata.artist].filter(Boolean).join(' ')},changed(){pickDur=undefined}});
 const relayPageId=(()=>{try{return crypto.randomUUID()}catch(e){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}})();
 let relayRoom='',relayInitialized=false;
-const relayReady=window.ManokaraSession.ready.then(info=>{relayRoom=info.room;relayInitialized=true;$('#obsurl').value=window.ManokaraSession.obsUrl(false);return info});
+const relayReady=window.ManokaraSession.ready.then(info=>{relayRoom=info.room;relayInitialized=true;$('#obsurl').value=window.ManokaraSession.obsUrl(false);window.ManokaraStudio?.refresh();return info});
 const relayUrl=path=>{const url=new URL(path,location.href);url.searchParams.set('room',relayRoom);return url.href};
 async function relayServerAction(action){try{await relayReady;return await window.ManokaraSession.api(relayUrl('/__lyric-owner'),{writerId:relayPageId,action},{keepalive:action==='release'})}catch(e){return undefined}}
 let claimPending=false,lastClaim=-Infinity;
@@ -304,7 +312,7 @@ $('#vol').oninput=e=>{if(media)media.volume=e.target.value/100;if(yt&&ytOk)yt.se
 try{const theme=localStorage.getItem('manokaraTheme');if(theme==='light'||theme==='dark')document.documentElement.dataset.theme=theme}catch(e){}
 $('#theme').onclick=()=>{const d=document.documentElement,current=d.dataset.theme||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');d.dataset.theme=current==='dark'?'light':'dark';try{localStorage.setItem('manokaraTheme',d.dataset.theme)}catch(e){}};
 const transposeDialog=$('#transposeDialog');
-const studioBackground=[document.querySelector('.app-header'),$('#grid'),document.querySelector('.app-footer')];
+const studioBackground=[...document.querySelectorAll('.app-header,.main-tabs,#grid,#playlistStudio,.app-footer')];
 function closeTranspose(){transposeDialog.hidden=true;studioBackground.forEach(el=>el.inert=false);$('#transpose').focus()}
 $('#transpose').onclick=()=>{transposeDialog.hidden=false;studioBackground.forEach(el=>el.inert=true);$('#transposeClose').focus()};
 $('#transposeClose').onclick=closeTranspose;
@@ -343,7 +351,15 @@ window.addEventListener('resize',updateCenterPreview);
 syncFxInputs();
 $('#lwin').onclick=()=>{if(!relayInitialized){msg('Wait for the lyric relay to connect.');return}const opened=window.open(window.ManokaraSession.obsUrl(true),'kpt-lyrics','width=1280,height=720');if(!opened)msg('Popup blocked. Please allow popups.');else msg('Green-screen window opened. It shares the OBS effect output.');};
 let relayUp=null,publishPending=false,relayScene=null;
-const relayDynamicFields=['writerId','time','sampledAt','playing','paused','counting','countdownRemaining','uploadDelayMs','audioPower','audioBass','audioLowMid','audioMid','audioVocal','audioTreble'];
+const relayDynamicFields=['writerId','time','playlistTime','sampledAt','playing','paused','counting','countdownRemaining','uploadDelayMs','audioPower','audioBass','audioLowMid','audioMid','audioVocal','audioTreble'];
+const playlistHistory=[];let playlistLastSung=null,playlistHistoryCount=0;
+function playlistMetadata(){
+ const active=ci,playing=mediaPlaying(),currentIndex=idx(),nextIndex=ci?nxt():last>=0?last+1:0;
+ if(!active)playlistLastSung=null;
+ if(playing&&active&&!active.mc&&playlistLastSung!==active){playlistLastSung=active;playlistHistory.push({song:active,title:String(active.title).slice(0,160),index:playlistHistoryCount++});if(playlistHistory.length>120)playlistHistory.shift()}
+ const songStart=Math.max(0,Math.floor(Math.max(0,currentIndex)/120)*120);
+ return JSON.stringify({now:active?(active.mc?uiText('MC break'):String(active.title).slice(0,160)):'',next:items[nextIndex]?(items[nextIndex].mc?uiText('MC break'):String(items[nextIndex].title).slice(0,160)):'',videoId:active&&!active.mc?(yid(active.url)||''):'',currentIndex,nextIndex:nextIndex<items.length?nextIndex:-1,status:!active?'ready':counting?'counting':paused?'paused':active.mc?'mc':playing?'playing':'ready',songs:items.slice(songStart,songStart+120).map((song,index)=>({title:String(song.mc?uiText('MC break'):song.title).slice(0,160),index:index+songStart})),history:playlistHistory.filter(row=>row.song!==active).map(({title,index})=>({title,index}))});
+}
 const uploadLatency=ManokaraCore.createLatencyEstimator();
 const audioReaction=ManokaraAudio.create($('#audioReaction'),$('#audioStatus'));
 let directChannel=null,directChannelName='';
@@ -369,7 +385,8 @@ function makeObsSnapshot(){
  const playing=mediaPlaying();
  const rawTime=!counting&&it&&!it.mc?elapsed():0,time=rawTime+(it&&!it.mc&&!counting?(it.off||0):0);
  const snapshot={writerId:relayPageId,ready:true,title:it&&!it.mc?it.title:'',lrc:it&&!it.mc?ManokaraLyrics.displayLrc(it):'',romajiLrc:it&&!it.mc?ManokaraLyrics.secondaryLrc(it):'',time,sampledAt:Date.now(),timelineVersion,playing,paused:!!paused,counting:!!counting,countdownRemaining:remaining,duration:it&&!it.mc?lyricDuration(it):0,mc:!!(it&&it.mc),memo:it&&it.mc?it.memo||'':'',size:+$('#lsz').value||64,foreground:$('#lcol').value,themeSeed,background:$('#lbgmode').value==='green'?'#00ff00':'transparent',transparent:$('#lbgmode').value!=='green',bold:$('#lbold').checked,font,googleFont,effect,centerFree:$('#lcenter').checked,centerShape:$('#lshape').value,colorTheme:$('#ltheme').value};
- Object.assign(snapshot,playing?audioReaction.sample():{audioPower:0,audioBass:0,audioLowMid:0,audioMid:0,audioVocal:0,audioTreble:0});return snapshot;
+ snapshot.overlay=window.ManokaraStudio.serialized;snapshot.playlist=playlistMetadata();snapshot.playlistTime=Math.max(0,rawTime);
+ Object.assign(snapshot,playing?audioReaction.sample():{audioPower:0,audioBass:0,audioLowMid:0,audioMid:0,audioVocal:0,audioTreble:0});window.ManokaraStudio.feed(snapshot);return snapshot;
 }
 async function publishObsState(){
  if(publishPending||!relayInitialized||relayUp==='inactive')return;
@@ -385,7 +402,7 @@ async function publishObsState(){
  finally{publishPending=false}
 }
 $('#copyobs').onclick=async()=>{try{await navigator.clipboard.writeText($('#obsurl').value);msg('OBS URL copied.')}catch(e){$('#obsurl').select();msg('Select and copy the OBS URL.')}};
-$('#rotateobs').onclick=async()=>{try{await window.ManokaraSession.rotate();$('#obsurl').value=window.ManokaraSession.obsUrl(false);msg('Previous OBS link revoked. Update your OBS Browser Source with this new URL.')}catch(e){msg(e.message)}};
+$('#rotateobs').onclick=async()=>{try{await window.ManokaraSession.rotate();$('#obsurl').value=window.ManokaraSession.obsUrl(false);window.ManokaraStudio.refresh();msg('Previous OBS links revoked. Update both lyrics and playlist Browser Sources with their new URLs.')}catch(e){msg(e.message)}};
 setInterval(publishObsState,200);
 relayReady.then(()=>publishObsState()).catch(e=>{setRelayStatus(false);msg(e.message)});
 setInterval(()=>{if(relayUp===true)relayServerAction('renew')},5000);
@@ -424,9 +441,10 @@ function refreshLanguage(){
  msg(messageSource);
 }
 ManokaraI18n.init();
+ManokaraStudio.init({changed:()=>publishObsState(),url:kind=>relayInitialized?ManokaraSession.obsUrl(false,kind):'',clearHistory(){playlistHistory.length=0;playlistHistoryCount=0;publishObsState()}});
 window.addEventListener('manokara:languagechange',refreshLanguage);
 refreshLanguage();
-ManokaraTour.init({showTab:showStudioTab});
+ManokaraTour.init({showTab:showStudioTab,showMain:ManokaraStudio.showMain,main:()=>ManokaraStudio.main});
 ManokaraSearch.init({ready:relayReady,endpoint:()=>relayUrl('/__youtube/search'),api:ManokaraSession.api,choose(video){
  const songPanel=$('#panel-song');
  if(yid($('#url').value.trim())===video.id){showStudioTab('song');songPanel.scrollTop=0;$('.field-grid').scrollIntoView({block:'nearest',behavior:'instant'});$('#ttl').focus({preventScroll:true});return true}

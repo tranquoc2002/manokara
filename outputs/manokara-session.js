@@ -43,8 +43,8 @@ window.ManokaraSession = (() => {
     : initialize();
   // The controller displays the error; mark the shared promise handled until it subscribes.
   ready.catch(() => {});
-  const obsUrl = popup => {
-    const url = new URL("/manokara-obs.html", location.origin);
+  const obsUrl = (popup, output = 'lyrics') => {
+    const url = new URL(output === 'playlist' ? "/manokara-playlist.html" : "/manokara-obs.html", location.origin);
     url.searchParams.set("room", info.room);
     if (popup) url.searchParams.set("popup", "1");
     // Fragments are never sent in HTTP requests or Referer headers.

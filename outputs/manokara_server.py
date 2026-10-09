@@ -25,9 +25,10 @@ from starlette.responses import FileResponse, JSONResponse, RedirectResponse, Re
 from starlette.routing import Route
 
 from manokara_media import MediaResponse, MediaService, MediaSettings
+from manokara_overlay import overlay_config, playlist_data
 
 ROOT = Path(__file__).resolve().parent
-MAX_BODY = 262_144
+MAX_BODY = 393_216
 MAX_ROOMS = 128
 MAX_ROOMS_PER_BROWSER = 8
 MAX_SESSIONS = 1024
@@ -221,11 +222,13 @@ async def read_json(request, limit=MAX_BODY):
 def snapshot(payload):
     strings = {"writerId": 128, "title": 512, "lrc": 200_000, "romajiLrc": 200_000, "memo": 4096,
                "font": 256, "googleFont": 128, "foreground": 9, "background": 16,
-               "effect": 32, "centerShape": 8, "colorTheme": 12}
+               "effect": 32, "centerShape": 8, "colorTheme": 12,
+               "overlay": 8192, "playlist": 64_000}
     numbers = {"time": (-86400, 604800), "sampledAt": (0, 100_000_000_000_000),
                "countdownRemaining": (0, 60), "duration": (0, 604800), "size": (24, 160),
                "themeSeed": (0, 4_294_967_295), "timelineVersion": (0, 100_000_000_000_000),
                "uploadDelayMs": (0, 2000),
+               "playlistTime": (0, 604800),
                **{name: (0, 1) for name in ("audioPower", "audioBass", "audioLowMid", "audioMid", "audioVocal", "audioTreble")}}
     booleans = set("ready playing paused counting mc transparent bold centerFree".split())
     if set(payload) - (strings.keys() | numbers.keys() | booleans):
@@ -250,11 +253,18 @@ def snapshot(payload):
     for name in ("foreground", "background"):
         if name in payload and not (re.fullmatch(r"#[a-fA-F0-9]{6}", payload[name]) or name == "background" and payload[name] == "transparent"):
             raise HTTPException(400, f"Invalid {name}.")
+    if "overlay" in payload:
+        overlay_config(payload["overlay"])
+    if "playlist" in payload:
+        playlist_data(payload["playlist"])
     return payload
 
 
 def asset_manifest():
     names = ["manokara.html", "manokara-obs.html", "manokara-folia.html", "manokara.ico",
+             "manokara-lyrics-view.html", "manokara-playlist.html",
+             "manokara-overlay.js", "manokara-studio.js", "manokara-studio.css",
+             "manokara-playlist.css", "manokara-viewer.js", "manokara-viewer.css",
              "manokara-ui.css", "manokara-icons.svg",
              "manokara-i18n.js", "manokara-tour.js", "manokara-tour.css",
              "manokara-search.js", "manokara-search.css",

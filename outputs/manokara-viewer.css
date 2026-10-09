@@ -1,0 +1,6 @@
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent;color-scheme:light}
+#overlayStage{position:absolute;transform-origin:top left;pointer-events:none}
+#lyricViewport{position:absolute;border:0;background:transparent}
+body[data-popup="true"][data-transparent="true"]{background:repeating-conic-gradient(#38443f 0% 25%,#2d3832 0% 50%) 0/24px 24px}
+#lyricViewport[hidden]{display:none}
+#viewerStatus{position:fixed;left:20px;bottom:20px;color:#fff;font:16px system-ui;text-shadow:0 1px 4px #000}

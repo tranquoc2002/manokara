@@ -139,6 +139,8 @@
     'Could not open your browser session.':'Chưa mở được phiên sử dụng. Thử tải lại trang nhé.',
     'Could not open a room.':'Chưa tạo được phòng hát. Thử tải lại trang nhé.',
     'Could not replace the OBS link.':'Chưa đổi được link OBS. Thử lại nhé.',
+    'Edit lyric layout':'Chỉnh bố cục lời', 'Main workspace':'Không gian làm việc',
+    'Previous OBS links revoked. Update both lyrics and playlist Browser Sources with their new URLs.':'Đã thu hồi các link OBS cũ. Cập nhật link mới cho cả nguồn lời và playlist trong OBS nhé.',
     'Help':'Hướng dẫn', 'Open the guided tour':'Mở hướng dẫn từng bước', 'Interface language':'Ngôn ngữ giao diện'
   };
   let language = /^vi\b/i.test(navigator.language || '') ? 'vi' : 'en';

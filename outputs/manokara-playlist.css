@@ -1,0 +1,123 @@
+/* Original Manokara overlays. OBS stays transparent outside each block. */
+.playlist-output{position:absolute;inset:0;pointer-events:none;color:#fff;font-family:system-ui,sans-serif;--playlist-accent:#b9dcc7;--playlist-surface:#15221db8;--playlist-radius:22px}
+.playlist-output[hidden],.playlist-block[hidden]{display:none!important}
+.playlist-block{position:absolute;box-sizing:border-box;container-type:inline-size;padding:28px;overflow:hidden;border:1px solid #ffffff26;border-radius:var(--playlist-radius);background:var(--playlist-surface);box-shadow:0 8px 32px #0002;line-height:1.3;isolation:isolate}
+.playlist-block h2{position:relative;z-index:1;font-family:inherit;font-size:.43em;font-weight:700;line-height:1.3;margin:0 0 22px;letter-spacing:.15em;text-transform:uppercase;color:var(--playlist-accent);padding:0}
+.playlist-content{position:relative;min-width:0;overflow-wrap:anywhere;word-break:normal}
+.playlist-song-title{position:relative;font-size:1em;font-weight:600;text-wrap:pretty;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.playlist-state{position:absolute;top:-38px;right:0;font-size:.45em;color:var(--playlist-accent)}
+.playlist-output[data-playing="false"] .playlist-state{opacity:.35}
+.playlist-position{position:absolute;right:0;bottom:0;font-size:1.6em;line-height:1;font-weight:300;opacity:.15;font-variant-numeric:tabular-nums}
+.playlist-next-number{position:absolute;right:0;bottom:-18px;font-size:2.7em;line-height:1;opacity:.12;font-variant-numeric:tabular-nums}
+.playlist-list-row{position:relative;display:flex;gap:.7em;padding:.45em 0;line-height:1.4;align-items:baseline;border-bottom:1px solid color-mix(in srgb,currentColor 9%,transparent)}
+.playlist-index{flex:none;min-width:1.8em;font-size:.63em;opacity:.5;font-variant-numeric:tabular-nums}
+.playlist-list-title{min-width:0;flex:1;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.playlist-list-row[data-current="true"]{color:var(--playlist-accent);font-weight:700}
+.playlist-empty{opacity:.35}
+.playlist-progress{position:relative;height:3px;background:color-mix(in srgb,currentColor 12%,transparent);margin-top:22px;border-radius:4px;overflow:hidden}
+.playlist-progress i{display:block;width:100%;height:100%;background:var(--playlist-accent);transform-origin:left;transform:scaleX(0)}
+.playlist-time{display:block;margin-top:8px;font-size:.33em;letter-spacing:.05em;opacity:.6;font-variant-numeric:tabular-nums}
+.playlist-art{position:relative;isolation:isolate;overflow:hidden;background:#172d2e}
+.playlist-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+.playlist-art-fallback{position:absolute;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at 25% 15%,#ffffff38,transparent 45%),radial-gradient(ellipse at 80% 85%,#0c555d,transparent 70%),linear-gradient(145deg,var(--playlist-accent),#49275b 55%,#192e39)}
+.playlist-art-fallback::before,.playlist-art-fallback::after{content:'';position:absolute;width:72%;height:72%;border:1px solid #ffffff38;border-radius:50%;transform:rotate(-25deg) scaleY(.52)}
+.playlist-art-fallback::after{transform:rotate(35deg) scaleY(.52)}
+.playlist-art-monogram{font-family:Georgia,serif;font-style:italic;font-size:100px;line-height:1;color:#fff9;text-shadow:0 4px 24px #0004}
+
+/* Glass: an asymmetric broadcast dashboard. */
+.playlist-output[data-theme="glass"] .playlist-block{background-image:linear-gradient(135deg,#ffffff13,transparent 60%);border-color:#ffffff30;box-shadow:inset 0 1px 0 #ffffff25,0 12px 36px #0002}
+.playlist-output[data-theme="glass"] [data-block="current"]{border-top:3px solid var(--playlist-accent)}
+.playlist-output[data-theme="glass"] [data-block="current"] h2::before{content:'';display:inline-block;width:6px;height:6px;margin-right:10px;vertical-align:middle;border-radius:50%;background:var(--playlist-accent);box-shadow:0 0 12px var(--playlist-accent)}
+.playlist-output[data-theme="glass"] [data-block="current"] .playlist-song-title{padding-right:45px;-webkit-line-clamp:2}
+.playlist-output[data-theme="glass"] .playlist-list-row{padding:.48em .35em;border:0;border-radius:8px;margin-bottom:3px}
+.playlist-output[data-theme="glass"] .playlist-list-row[data-current="true"]{background:color-mix(in srgb,var(--playlist-accent) 12%,transparent);box-shadow:inset 3px 0 var(--playlist-accent)}
+.playlist-output[data-theme="glass"] [data-block="next"]{border-style:dashed;background-image:none}
+
+/* Paper: an editorial cover, ruled setlist and separate ticket. */
+.playlist-output[data-theme="paper"] .playlist-block{border-color:#57472e30;box-shadow:4px 5px 0 #29241d18;padding:32px}
+.playlist-output[data-theme="paper"] h2{font-family:system-ui,sans-serif;font-size:.36em;letter-spacing:.2em;padding-bottom:14px;border-bottom:2px solid currentColor}
+.playlist-output[data-theme="paper"] [data-block="current"]{border-top:6px solid var(--playlist-accent)}
+.playlist-output[data-theme="paper"] [data-block="current"] .playlist-song-title{font-style:italic;font-weight:400;padding-right:35px;-webkit-line-clamp:2}
+.playlist-output[data-theme="paper"] .playlist-progress{height:2px}
+.playlist-output[data-theme="paper"] .playlist-time{font-family:system-ui,sans-serif}
+.playlist-output[data-theme="paper"] [data-block="list"]{padding-left:56px;background-image:linear-gradient(90deg,transparent 38px,color-mix(in srgb,var(--playlist-accent) 28%,transparent) 38px,color-mix(in srgb,var(--playlist-accent) 28%,transparent) 39px,transparent 39px)}
+.playlist-output[data-theme="paper"] .playlist-list-row{padding:.48em 0;border-color:#57472e24}
+.playlist-output[data-theme="paper"] .playlist-index{font-family:system-ui,sans-serif;font-size:.52em;color:var(--playlist-accent)}
+.playlist-output[data-theme="paper"] [data-block="next"]{border:1px dashed #57472e60}
+.playlist-output[data-theme="paper"] [data-block="next"]::before{content:'';position:absolute;top:0;bottom:0;left:14px;border-left:1px dashed #57472e38}
+.playlist-output[data-theme="paper"] .playlist-next-number{font-family:system-ui,sans-serif;right:0;bottom:-35px}
+
+/* Minimal: typography and a vertical cue line, without a panel. */
+.playlist-output[data-theme="minimal"] .playlist-block{padding:0 0 0 28px;border:0;border-left:2px solid color-mix(in srgb,var(--playlist-accent) 45%,transparent);box-shadow:none;text-shadow:0 2px 8px #0008;border-radius:0}
+.playlist-output[data-theme="minimal"] h2{font-size:.27em;letter-spacing:.25em;opacity:.72;margin-bottom:20px}
+.playlist-output[data-theme="minimal"] [data-block="current"] .playlist-song-title{font-weight:400;letter-spacing:-.035em;-webkit-line-clamp:2}
+.playlist-output[data-theme="minimal"] .playlist-position{display:none}
+.playlist-output[data-theme="minimal"] .playlist-state{top:-35px}
+.playlist-output[data-theme="minimal"] .playlist-list-row{padding:.42em 0;border:0;opacity:.55}
+.playlist-output[data-theme="minimal"] .playlist-list-row[data-current="true"]{opacity:1}
+.playlist-output[data-theme="minimal"] .playlist-list-row[data-current="true"]::before{content:'';position:absolute;left:-24px;top:22px;width:6px;height:6px;border-radius:50%;background:var(--playlist-accent)}
+.playlist-output[data-theme="minimal"] .playlist-progress{width:150px;margin-top:20px;height:2px}
+.playlist-output[data-theme="minimal"] [data-block="next"] h2{display:inline-block;vertical-align:top;width:100px;line-height:2;margin:4px 20px 0 0}
+.playlist-output[data-theme="minimal"] [data-block="next"] .playlist-content{display:inline-block;width:calc(100% - 130px)}
+.playlist-output[data-theme="minimal"] .playlist-next-number{display:none}
+
+/* Card: album artwork leads; queue alongside. */
+.playlist-output[data-theme="card"] [data-block="current"]{padding:20px;border-color:#ffffff1a;box-shadow:0 12px 42px #0004}
+.playlist-output[data-theme="card"] [data-block="current"] h2{position:absolute;left:36px;top:36px;z-index:3;padding:8px 12px;border-radius:30px;color:#fff;background:#151520a6;font-size:.3em;letter-spacing:.1em;margin:0}
+.playlist-output[data-theme="card"] .playlist-art{width:100%;height:67cqw;max-height:300px;border-radius:max(4px,calc(var(--playlist-radius) - 10px));margin-bottom:24px}
+.playlist-output[data-theme="card"] .playlist-song-title{font-weight:500;letter-spacing:-.025em}
+.playlist-output[data-theme="card"] [data-block="current"] .playlist-song-title{padding:0 8px}
+.playlist-output[data-theme="card"] .playlist-state{top:auto;bottom:0;right:8px}
+.playlist-output[data-theme="card"] .playlist-position{display:none}
+.playlist-output[data-theme="card"] .playlist-progress{margin:22px 8px 0;height:4px}
+.playlist-output[data-theme="card"] .playlist-time{margin-left:8px}
+.playlist-output[data-theme="card"] [data-block="list"]{padding:30px;background-image:linear-gradient(180deg,#ffffff08,transparent 55%)}
+.playlist-output[data-theme="card"] .playlist-list-row{padding:.65em .45em;margin-bottom:4px;border:0;border-radius:10px}
+.playlist-output[data-theme="card"] .playlist-list-row[data-current="true"]{background:color-mix(in srgb,var(--playlist-accent) 15%,transparent)}
+.playlist-output[data-theme="card"] [data-block="next"]{background-image:linear-gradient(110deg,#ffffff10,transparent)}
+.playlist-output[data-theme="card"] [data-block="next"] h2{margin-bottom:12px}
+.playlist-output[data-theme="card"] .playlist-next-number{bottom:-12px;right:0}
+
+/* Vinyl: horizontal turntable with grooves, centre label and tonearm. */
+.playlist-output[data-theme="vinyl"] [data-block="current"]{padding:36px;background-image:linear-gradient(135deg,#ffffff09,transparent),repeating-linear-gradient(0deg,#ffffff03 0 1px,transparent 1px 4px)}
+.playlist-output[data-theme="vinyl"] [data-block="current"] h2{margin-left:300px;margin-bottom:24px;letter-spacing:.2em;font-size:.3em}
+.playlist-output[data-theme="vinyl"] [data-block="current"] .playlist-content{position:static;padding-left:300px}
+.playlist-output[data-theme="vinyl"] .playlist-art{position:absolute;left:32px;top:32px;width:268px;height:268px;border-radius:50%;background:repeating-radial-gradient(#141716 0 2px,#343a35 3px,#141716 4px);box-shadow:0 0 0 1px #ffffff18,0 6px 16px #0006;animation:playlist-spin 18s linear infinite;animation-play-state:paused}
+.playlist-output[data-theme="vinyl"] .playlist-art-fallback,.playlist-output[data-theme="vinyl"] .playlist-art img{inset:30%;width:40%;height:40%;border-radius:50%;overflow:hidden}
+.playlist-output[data-theme="vinyl"] .playlist-art-monogram{font-size:50px}
+.playlist-output[data-theme="vinyl"] .playlist-art::after{content:'';position:absolute;z-index:2;left:calc(50% - 6px);top:calc(50% - 6px);width:12px;height:12px;border-radius:50%;background:#b8c4b9;box-shadow:0 0 0 4px #1e2620}
+.playlist-output[data-theme="vinyl"][data-playing="true"] .playlist-art{animation-play-state:running}
+.playlist-output[data-theme="vinyl"] [data-block="current"] .playlist-content::after{content:'';position:absolute;left:266px;top:34px;width:6px;height:148px;border-radius:6px;background:linear-gradient(90deg,#6e736b,#e0dfc9,#6e736b);transform:rotate(28deg);transform-origin:top;box-shadow:0 4px 4px #0006}
+.playlist-output[data-theme="vinyl"] [data-block="current"] .playlist-song-title{font-weight:400;letter-spacing:-.02em;padding-right:12px}
+.playlist-output[data-theme="vinyl"] .playlist-state{top:36px;right:36px}
+.playlist-output[data-theme="vinyl"] .playlist-position{right:30px;bottom:24px;font-size:1.25em}
+.playlist-output[data-theme="vinyl"] .playlist-progress{margin-top:28px}
+.playlist-output[data-theme="vinyl"] [data-block="list"] h2{padding-bottom:18px;border-bottom:1px solid color-mix(in srgb,var(--playlist-accent) 35%,transparent)}
+.playlist-output[data-theme="vinyl"] .playlist-index{border:1px solid currentColor;border-radius:50%;width:26px;height:26px;min-width:26px;text-align:center;line-height:26px;font-size:.5em}
+.playlist-output[data-theme="vinyl"] .playlist-list-row{padding:.45em 0}
+.playlist-output[data-theme="vinyl"] [data-block="next"]{border-top:3px solid var(--playlist-accent)}
+
+/* Signal: a compact lower third with cover icon and bottom progress rail. */
+.playlist-output[data-theme="signal"] .playlist-block{padding:24px 28px;border-color:#ffffff26;background-image:linear-gradient(120deg,#ffffff08,transparent);box-shadow:0 6px 26px #0003}
+.playlist-output[data-theme="signal"] [data-block="current"]{padding-left:152px;border-left:4px solid var(--playlist-accent)}
+.playlist-output[data-theme="signal"] h2{margin-bottom:12px;font-size:.3em;letter-spacing:.18em}
+.playlist-output[data-theme="signal"] .playlist-content{position:static}
+.playlist-output[data-theme="signal"] .playlist-art{position:absolute;left:24px;top:22px;width:112px;height:112px;border-radius:12px}
+.playlist-output[data-theme="signal"] .playlist-art-monogram{font-size:62px}
+.playlist-output[data-theme="signal"] [data-block="current"] .playlist-song-title{padding-right:100px;white-space:nowrap;display:block;text-overflow:ellipsis;letter-spacing:-.02em}
+.playlist-output[data-theme="signal"] .playlist-progress{position:absolute;left:0;right:0;bottom:0;margin:0;height:4px;border-radius:0}
+.playlist-output[data-theme="signal"] .playlist-time{margin-top:12px;font-size:.3em}
+.playlist-output[data-theme="signal"] .playlist-state{top:28px;right:28px}
+.playlist-output[data-theme="signal"] .playlist-position{right:26px;bottom:20px;font-size:1.3em}
+.playlist-output[data-theme="signal"] [data-block="next"] .playlist-song-title{padding-right:55px;-webkit-line-clamp:2}
+.playlist-output[data-theme="signal"] .playlist-next-number{right:22px;bottom:14px;font-size:1.6em}
+@keyframes playlist-spin{to{transform:rotate(360deg)}}
+.playlist-block[data-bold="true"] .playlist-song-title{font-weight:700}
+@media(prefers-reduced-motion:reduce){.playlist-art{animation:none!important}}
+/* Narrow resized players use a compact disc rather than covering their title. */
+@container (max-width:560px){
+ .playlist-output[data-theme="vinyl"] [data-block="current"] h2{margin-left:0}
+ .playlist-output[data-theme="vinyl"] [data-block="current"] .playlist-content{padding-left:0}
+ .playlist-output[data-theme="vinyl"] .playlist-art{position:relative;left:auto;top:auto;width:150px;height:150px;float:left;margin:0 20px 16px 0}
+ .playlist-output[data-theme="vinyl"] [data-block="current"] .playlist-content::after{display:none}
+}

@@ -67,6 +67,12 @@ Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocke
 
 ## Runtime behavior
 
+### Playlist overlay and layout editor
+
+Deploy the updated controller/session/i18n/tour/server along with `manokara_overlay.py`, `manokara-overlay.js`, `manokara-studio.js` / `.css`, `manokara-playlist.html` / `.css`, `manokara-viewer.js` / `.css`, `manokara-obs.html` and `manokara-lyrics-view.html`. Restart Python so its asset manifest, content security policy and state validation include the new files, then reload the controller and existing OBS source. No new dependency or build step is needed.
+
+The original lyric URL still works. In the main **Playlist** tab, copy a separate playlist URL into another OBS Browser Source. Use the frame dimensions shown by the editor for both sources. Viewer tokens remain in URL fragments and both outputs follow the same room/revocation rules. The playlist transfers bounded song metadata and layout settings, never executable theme HTML/CSS from uploads. JSON layout imports accept only Manokara's data schema. The request body limit is 384 KiB to accommodate bounded playlist metadata alongside lyrics; existing lyric length checks remain in place.
+
 ### YouTube videos that cannot be embedded
 
 The normal YouTube player is tried first. On embedded-player errors 5, 101 or 150, the app tries server playback using yt-dlp and FFmpeg. The supplied start script enables this with `MANOKARA_YTDLP_ENABLED=1` and uses Chrome impersonation with `MANOKARA_YTDLP_IMPERSONATE=chrome`. Both tools and Deno must be in the server account's PATH; install compatible yt-dlp-ejs if your yt-dlp package requires it. You can use Node instead by setting `MANOKARA_YTDLP_JS_RUNTIME=node`. Unset the enabled variable to run with embedded playback only.
