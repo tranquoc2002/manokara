@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
 import time
 
@@ -382,6 +383,56 @@ def test_request_body_timeout_without_waiting_five_seconds(monkeypatch):
             await server.read_json(request)
         assert error.value.status_code == 408
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("path,payload", [
+    ("/__lyric-owner", {"writerId": "writer-A", "action": "release"}),
+    ("/__lyric-owner", {"writerId": "writer-B", "action": "claim"}),
+    ("/__lyric-state", {"writerId": "writer-A", "lrc": "Changed lyrics", "time": 99}),
+])
+@pytest.mark.parametrize("phase", ["before_body", "partial_body", "awaiting_final_chunk"])
+def test_interrupted_relay_request_preserves_room_and_sends_no_response(client, app, path, payload, phase):
+    open_session(client)
+    room_id = room(client)["room"]
+    endpoint = f"/__lyric-state?room={room_id}"
+    assert client.post(endpoint, json={"writerId": "writer-A", "ready": True,
+                                     "lrc": "Current lyrics", "time": 4}).status_code == 200
+    previous = dict(app.state.store.live[room_id])
+    body = json.dumps(payload).encode()
+    messages = []
+    if phase != "before_body":
+        # Even valid JSON is incomplete until the final HTTP body chunk arrives.
+        chunk = body[:len(body) // 2] if phase == "partial_body" else body
+        messages.append({"type": "http.request", "body": chunk, "more_body": True})
+    messages.append({"type": "http.disconnect"})
+    sent = []
+
+    async def run():
+        incoming = iter(messages)
+
+        async def receive():
+            return next(incoming)
+
+        async def send(message):
+            sent.append(message)
+
+        cookie = "__Host-manokara_session=" + client.cookies.get("__Host-manokara_session")
+        scope = {"type": "http", "asgi": {"version": "3.0", "spec_version": "2.4"},
+                 "http_version": "1.1", "method": "POST", "scheme": "https", "path": path,
+                 "raw_path": path.encode(), "query_string": f"room={room_id}".encode(), "root_path": "",
+                 "headers": [(b"host", b"karaoke.example.com"), (b"origin", ORIGIN.encode()),
+                             (b"cookie", cookie.encode()), (b"content-type", b"application/json"),
+                             (b"content-length", str(len(body)).encode())],
+                 "server": ("karaoke.example.com", 443), "client": ("127.0.0.1", 1234)}
+        await app(scope, receive, send)
+
+    asyncio.run(run())
+    assert sent == [], "A disconnected request must not attempt to send an error response."
+    assert app.state.store.live[room_id] == previous
+    assert client.get("/healthz").status_code == 200
+    assert client.post(f"/__lyric-owner?room={room_id}",
+                       json={"writerId": "writer-A", "action": "renew"}).status_code == 200
+    assert client.get(endpoint).json()["lrc"] == "Current lyrics"
 
 
 def test_relay_reports_server_age_without_trusting_device_clock(client, app):

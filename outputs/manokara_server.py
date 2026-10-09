@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 from starlette.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from starlette.routing import Route
 
@@ -351,7 +351,12 @@ class SecurityHeaders:
             return await JSONResponse({"error": "Method not allowed."}, 405)(scope, receive, secure_send)
         if scope["method"] == "POST" and request.headers.get("origin") != self.settings.origin:
             return await JSONResponse({"error": "Invalid origin."}, 403)(scope, receive, secure_send)
-        await self.app(scope, receive, secure_send)
+        try:
+            await self.app(scope, receive, secure_send)
+        except ClientDisconnect:
+            # The client closed the connection before its request finished.
+            # Stop processing; there is no connected peer to send an error to.
+            return
 
 
 def create_app(settings=None):
