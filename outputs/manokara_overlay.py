@@ -38,7 +38,9 @@ def parse(raw):
 
 def overlay_config(raw):
     value = parse(raw)
-    object_value(value, "version width height lyric playlist")
+    required = set("version width height lyric playlist".split())
+    if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {"lyricCompact"}:
+        invalid()
     if type(value["version"]) is not int or value["version"] != 1:
         invalid()
     number(value["width"], 320, 3840)
@@ -55,8 +57,24 @@ def overlay_config(raw):
         boolean(block["visible"])
 
     rect(value["lyric"])
+    if "lyricCompact" in value:
+        rect(value["lyricCompact"], "autoFit")
+        boolean(value["lyricCompact"]["autoFit"])
     p = value["playlist"]
-    object_value(p, "theme foreground accent background opacity radius font limit listMode numbering progress hideIdle blocks")
+    required = set("theme foreground accent background opacity radius font limit listMode numbering progress hideIdle blocks".split())
+    optional = {"layout", "group", "autoScroll", "scrollSpeed", "scrollPause"}
+    if not isinstance(p, dict) or not required <= set(p) or set(p) - required - optional:
+        invalid()
+    if "layout" in p and p["layout"] not in ("separate", "unified"):
+        invalid()
+    if "group" in p:
+        rect(p["group"])
+    if "autoScroll" in p:
+        boolean(p["autoScroll"])
+    if "scrollSpeed" in p:
+        number(p["scrollSpeed"], 8, 80)
+    if "scrollPause" in p:
+        number(p["scrollPause"], 0, 10)
     if p["theme"] not in ("glass", "paper", "minimal", "card", "vinyl", "signal") or p["font"] not in ("system", "geist", "serif", "mono") or p["listMode"] not in ("all", "upcoming", "history"):
         invalid()
     for name in ("foreground", "accent", "background"):

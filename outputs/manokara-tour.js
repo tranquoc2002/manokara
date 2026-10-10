@@ -1,7 +1,7 @@
-/* An opt-in tour of the live controller. It never edits the song draft or playback state. */
+/* Contextual tours of the controller and overlay editor; playback and saved settings stay intact. */
 (() => {
   'use strict';
-  const steps = [
+  const karaokeSteps = [
     {target:'#setlistSide .section-head',
       en:['Your evening, one song at a time','Your songs live in this list. Click a song to play it; use its small buttons to edit, reorder or remove it. The list is saved in this browser.'],
       vi:['Danh sách bài của bạn','Các bài bạn thêm nằm ở đây. Bấm vào một bài để phát; các nút nhỏ bên cạnh giúp sửa, đổi thứ tự hoặc xóa bài. Danh sách được lưu ngay trên trình duyệt này.']},
@@ -24,8 +24,8 @@
       en:['Japanese lyrics, easier to read','Create Romaji adds Latin-letter readings without changing the original timecodes. Choose Original, Romaji or Japanese + Romaji. The first run needs to load a dictionary; review names and unusual readings before saving.'],
       vi:['Lời tiếng Nhật dễ đọc hơn','Tạo Romaji giúp thêm cách đọc bằng chữ Latin và giữ nguyên mốc thời gian gốc. Bạn chọn lời gốc, Romaji hoặc cả hai đều được. Lần đầu cần tải từ điển một chút; nhớ xem lại tên riêng và cách đọc trước khi lưu nhé.']},
     {tab:'song',target:'.form-actions',
-      en:['Save your song','Add to setlist keeps the link and lyrics together. When editing, this button becomes Save changes. A positive lyric offset makes words appear earlier; a negative value makes them appear later.'],
-      vi:['Lưu bài là sẵn sàng hát','Bấm Thêm vào danh sách để lưu cả link và lời. Khi sửa bài, nút này sẽ thành Lưu thay đổi. Độ lệch lời dương cho chữ hiện sớm hơn, âm cho chữ hiện muộn hơn.']},
+      en:['Save your song','Add to setlist keeps the link and lyrics together. Song key saves a semitone shift for this song (0 is the original key). When editing, this button becomes Save changes. A positive lyric offset makes words appear earlier; a negative value makes them appear later.'],
+      vi:['Lưu bài là sẵn sàng hát','Bấm Thêm vào danh sách để lưu cả link và lời. Tông bài hát lưu số nửa cung cần tăng giảm riêng cho bài này (0 là tông gốc). Khi sửa bài, nút sẽ thành Lưu thay đổi. Độ lệch lời dương cho chữ hiện sớm hơn, âm cho chữ hiện muộn hơn.']},
     {target:'.transport',
       en:['Take the stage','Play starts your set. Pause/Resume, previous, next and Stop are here, alongside volume. Below, Countdown gives you a moment before a song starts; set it to 0 to start straight away.'],
       vi:['Đến lúc cất giọng rồi','Bấm Phát để bắt đầu. Tạm dừng / Tiếp tục, bài trước, bài tiếp, Dừng và âm lượng đều ở đây. Đếm ngược bên dưới cho bạn vài giây chuẩn bị; đặt 0 nếu muốn vào bài ngay.']},
@@ -51,11 +51,61 @@
       en:['Leave the middle for your character','Keep centre free puts alternating lines at the sides on wide frames, or above/below on tall ones. Some Folia scenes keep their original layout; the note here explains the selected effect. Match the frame shape to your OBS canvas.'],
       vi:['Chừa chỗ ở giữa cho nhân vật','Chừa trống giữa khung cho lời luân phiên hai bên khi khung ngang, hoặc trên / dưới khi khung dọc. Một số cảnh Folia giữ bố cục gốc; ghi chú ở đây sẽ nói rõ với hiệu ứng bạn đang chọn. Chọn dáng khung khớp với canvas OBS nhé.']},
     {target:'.header-actions',
-      en:['You are ready — come back any time','Change the interface language or light/dark theme here. Transpose explains how to use the browser extension for pitch and speed. Your language choice is remembered. Tap ? whenever you want to walk through the guide again.'],
-      vi:['Vậy là sẵn sàng rồi nhé','Đổi tiếng Việt / English hoặc giao diện sáng / tối ở đây. Transpose chỉ cách dùng tiện ích trình duyệt để chỉnh tông và tốc độ. Ngôn ngữ bạn chọn sẽ được ghi nhớ. Khi cần xem lại, cứ bấm ? để mở hướng dẫn từ đầu nhé.']}
+      en:['You are ready — come back any time','Change the language or light/dark theme here. Key opens the built-in pitch controls: −/+ shifts by one semitone, Original key resets it. Each song remembers its key, and playback speed stays unchanged. YouTube key shifting needs server playback. Tap ? to revisit the guide.'],
+      vi:['Vậy là sẵn sàng rồi nhé','Đổi ngôn ngữ hoặc giao diện sáng / tối ở đây. Nút Tông mở bộ chỉnh ngay trong app: −/+ đổi một nửa cung, Tông gốc để đặt lại. Mỗi bài nhớ tông riêng và tốc độ nhạc vẫn giữ nguyên. Đổi tông YouTube cần bật phát qua máy chủ. Khi cần xem lại, cứ bấm ? nhé.']}
   ];
-  const labels={en:{guide:'Getting started',close:'Close guide',skip:'Skip guide',back:'Back',next:'Next',done:'Let’s sing',step:'Step',of:'of',language:'Guide language'},vi:{guide:'Làm quen với Manokara',close:'Đóng hướng dẫn',skip:'Bỏ qua',back:'Quay lại',next:'Tiếp',done:'Bắt đầu hát thôi',step:'Bước',of:'/',language:'Ngôn ngữ hướng dẫn'}};
-  let root,card,focusRing,adapter,index=0,active=false,saved,frame=0,revision=0;
+  const overlaySteps = [
+    {overlay:'playlist',target:'.studio-targets',
+      en:['Two outputs, one editor','Playlist overlay shows the current song, setlist and next song. Lyrics overlay arranges the animated words. Each has its own OBS link. Switching between them keeps the music playing.'],
+      vi:['Hai đầu ra, chỉnh ở cùng một chỗ','Overlay playlist hiện bài đang hát, danh sách bài và bài tiếp theo. Overlay lời dùng để canh khung chữ chạy. Mỗi phần có một link OBS riêng; bạn chuyển qua lại thì nhạc vẫn chạy nhé.']},
+    {overlay:'playlist',target:'#studioPresets',
+      en:['Choose a playlist design','Try Glass, Paper, Minimal, Card, Vinyl or Signal. Each changes the layout and visual treatment. Choosing a preset replaces the playlist appearance; you can then customize it below.'],
+      vi:['Chọn kiểu playlist bạn thích','Thử Kính mờ, Trang giấy, Tối giản, Thẻ bài hát, Đĩa nhạc hoặc Thanh tín hiệu. Mỗi kiểu có bố cục và cách trình bày riêng. Chọn mẫu sẽ thay giao diện playlist hiện tại; sau đó bạn chỉnh tiếp ở bên dưới.']},
+    {overlay:'playlist',target:'#studioFrame',
+      en:['Match your OBS canvas','Choose a landscape or portrait frame. The preview keeps this aspect ratio. Use the displayed width and height for both OBS Browser Sources. Changing the frame scales your existing blocks.'],
+      vi:['Chọn khung khớp với OBS','Chọn khung ngang hoặc dọc; phần xem trước sẽ giữ đúng tỉ lệ đó. Nhập cùng chiều rộng và chiều cao này cho hai nguồn Browser trong OBS. Đổi khung cũng sẽ co giãn các khối bạn đã đặt.']},
+    {overlay:'playlist',target:'#studioLayoutSection',
+      en:['Move each block, or keep them together','Separate blocks lets you position the current song, list and next song independently. One unified panel keeps them aligned so you can move and resize the whole playlist together.'],
+      vi:['Tách từng khối hoặc gom cho dễ canh','Tách từng khối cho bạn đặt bài đang hát, danh sách và bài tiếp theo ở các vị trí riêng. Gom thành một bảng giữ chúng thẳng hàng để bạn kéo và đổi kích thước cả playlist cùng lúc.']},
+    {overlay:'playlist',target:'#studioBlockSection',
+      en:['Select the part you want to edit','Choose Now Singing, Song List or Next On. The controls below apply to that section. Show this block lets you hide it; in unified mode, position and size apply to the whole panel.'],
+      vi:['Chọn phần muốn chỉnh','Bấm Bài đang hát, Danh sách bài hoặc Bài tiếp theo rồi chỉnh ở bên dưới. Bỏ chọn Hiện khối này nếu muốn ẩn phần đó. Khi gom thành một bảng, vị trí và kích thước sẽ áp dụng cho cả bảng.']},
+    {overlay:'playlist',target:'#studioGeometry',
+      en:['Position and resize without stretching','X and Y set the position; Width and Height set the size. Keep aspect ratio links width and height when resizing. You can also drag in the preview, resize from any of four corners or four edges, or use arrow keys; Shift moves in larger steps. Top center and Bottom center place the block quickly.'],
+      vi:['Canh vị trí, đổi kích thước cho vừa','X và Y là vị trí; Rộng và Cao là kích thước. Bật Giữ tỉ lệ rộng/cao để phóng to, thu nhỏ mà không méo khung. Bạn cũng có thể kéo trong phần xem trước, kéo một trong 4 góc hoặc 4 cạnh để đổi cỡ, hoặc dùng phím mũi tên; giữ Shift để dịch nhanh hơn. Giữa trên và Giữa dưới giúp đặt khối nhanh vào hai vị trí đó.']},
+    {overlay:'playlist',target:'#blockTypography',
+      en:['Customize the headings and text','Rename the selected heading, adjust text size and alignment, or toggle bold. These settings are for the playlist; lyric fonts and effects have their own controls in Lyrics overlay.'],
+      vi:['Chỉnh tiêu đề và chữ','Đổi tên tiêu đề đang chọn, cỡ chữ, căn trái / giữa / phải hoặc bật chữ đậm. Đây là phần chữ của playlist; font và hiệu ứng lời hát có bộ chỉnh riêng ở Overlay lời.']},
+    {overlay:'playlist',target:'#playlistAppearance',
+      en:['Colors and list content','Adjust text, accent and panel colors, opacity, corners and font. List content can show the whole setlist, upcoming songs or sung history. Numbers, progress and Hide when idle are optional.'],
+      vi:['Đổi màu và chọn nội dung danh sách','Chỉnh màu chữ, màu nhấn, nền, độ đậm nền, bo góc và font. Danh sách có thể hiện cả setlist, các bài sắp hát hoặc những bài đã hát. Bạn cũng có thể bật số thứ tự, tiến trình và ẩn khi chưa phát bài.']},
+    {overlay:'playlist',target:'#studioAutoScrollField',
+      en:['Let viewers see the whole list','Auto-scroll moves long lists down and back up. Set its speed and the pause at each end below. Short lists stay still. With scrolling off, Static list limit controls how many songs appear.'],
+      vi:['Cho người xem thấy hết danh sách','Bật tự cuộn để danh sách dài chạy xuống rồi quay lên. Chỉnh tốc độ và thời gian dừng ở mỗi đầu ngay bên dưới. Danh sách ngắn sẽ đứng yên; nếu tắt cuộn, Số bài khi tắt cuộn quyết định số bài được hiện.']},
+    {overlay:'playlist',target:'.studio-preview-toolbar',
+      en:['Preview before going live','Sample data helps you arrange the overlay without starting a song; Live data uses your current setlist and playback. Checkerboard, dark, light and scene backgrounds are only preview aids. Both overlays shows playlist and lyrics together.'],
+      vi:['Xem trước rồi hãy lên sóng','Dữ liệu mẫu giúp canh overlay mà chưa cần phát bài; Bài đang phát lấy dữ liệu thật từ phiên hát. Nền caro, tối, sáng và mẫu livestream chỉ để dễ nhìn khi chỉnh. Bật Cả hai overlay để xem playlist và lời cùng nhau.']},
+    {overlay:'playlist',target:'.studio-history-tools',
+      en:['A closer look, and a way back','View larger opens a bigger preview. Undo and Redo move through layout edits; Reset layout restores the selected output’s layout. Your changes are saved automatically in this browser.'],
+      vi:['Xem rõ hơn, sửa nhầm thì quay lại','Xem lớn mở khung xem trước rộng hơn. Hoàn tác và Làm lại giúp lùi / tiến qua các lần chỉnh bố cục; Đặt lại bố cục đưa đầu ra đang chọn về bố cục mặc định. Các chỉnh sửa được tự lưu trong trình duyệt này.']},
+    {overlay:'playlist',target:'.studio-link',
+      en:['Add the playlist to OBS','Copy this link into a separate OBS Browser Source for the playlist. Match its dimensions to the frame above. Keep Manokara open while singing and disable “Shutdown source when not visible” in OBS.'],
+      vi:['Đưa playlist vào OBS','Sao chép link này vào một nguồn Browser riêng cho playlist. Đặt kích thước nguồn giống khung đã chọn phía trên. Khi hát, giữ Manokara mở và tắt “Shutdown source when not visible” trong OBS nhé.']},
+    {overlay:'lyrics',target:'#studioLyricSettings',
+      en:['Style your animated lyrics here','Choose the effect, transparency, palette, font and size here, just as in Karaoke → OBS output. These are shared settings. Classic karaoke also has a Sung highlight color; Keep centre free leaves space for your character in supported styles.'],
+      vi:['Chỉnh hiệu ứng lời ngay tại đây','Chọn hiệu ứng, nền trong suốt, bảng màu, font và cỡ chữ giống phần Đầu ra OBS ở Karaoke. Hai nơi dùng chung một bộ setting. Karaoke cổ điển có thêm Màu quét; Chừa trống giữa khung giúp dành chỗ cho nhân vật với các kiểu có hỗ trợ.']},
+    {overlay:'lyrics',target:'#studioGeometry',
+      en:['Place the lyric viewport','The eight text effects use a compact frame fitted to the longest lines in the song; manual geometry edits turn auto-fit off. Scene effects and Keep centre free retain the full lyric viewport. Move or resize from any corner or edge; Keep aspect ratio preserves its shape. Effect and lyric content are unchanged; for Classic karaoke, word-timed LRC gives a more accurate sweep than line-only LRC.'],
+      vi:['Đặt khung lời vào đúng chỗ','Tám hiệu ứng chữ dùng khung gọn ôm theo các câu dài nhất trong bài; chỉnh vị trí hoặc cỡ thủ công sẽ tắt tự ôm. Hiệu ứng dựng cảnh và Chừa trống giữa khung giữ vùng lời đầy đủ. Kéo mọi góc hoặc cạnh để đổi cỡ; Giữ tỉ lệ rộng/cao giúp khung không bị méo. Hiệu ứng và nội dung lời vẫn giữ nguyên; Karaoke cổ điển sẽ quét sát hơn nếu LRC có mốc từng từ thay vì chỉ từng câu.']},
+    {overlay:'lyrics',target:'.studio-link',
+      en:['The lyrics have their own OBS link','This is now the lyrics link. Copy it into your lyric Browser Source, keeping the playlist as a second source. The saved viewport and appearance apply to the lyric output.'],
+      vi:['Lời hát có link OBS riêng','Link ở đây lúc này là link lời hát. Sao chép vào nguồn Browser dành cho lời; playlist vẫn là một nguồn riêng. Đầu ra lời sẽ dùng khung và giao diện bạn đã chỉnh.']},
+    {overlay:'lyrics',target:'.studio-export',
+      en:['Save a copy of your layout','Export layout downloads a JSON file for backup or another browser; Import layout restores one. It contains the overlay layout, not your songs. To revisit this guide, open Overlay and press ?; Karaoke has its own tour.'],
+      vi:['Giữ một bản bố cục để dùng lại','Xuất bố cục tải file JSON để cất hoặc mang sang trình duyệt khác; Nhập bố cục mở lại file đó. File này lưu bố cục overlay, không kèm danh sách bài. Muốn xem lại hướng dẫn, vào Overlay rồi bấm ?; tab Karaoke có tour riêng nhé.']}
+  ];
+  const labels={en:{guide:'Getting started',overlayGuide:'Overlay guide',close:'Close guide',skip:'Skip guide',back:'Back',next:'Next',done:'Let’s sing',overlayDone:'Done',step:'Step',of:'of',language:'Guide language'},vi:{guide:'Làm quen với Manokara',overlayGuide:'Hướng dẫn chỉnh Overlay',close:'Đóng hướng dẫn',skip:'Bỏ qua',back:'Quay lại',next:'Tiếp',done:'Bắt đầu hát thôi',overlayDone:'Xong',step:'Bước',of:'/',language:'Ngôn ngữ hướng dẫn'}};
+  let steps=karaokeSteps,root,card,focusRing,adapter,index=0,active=false,saved,frame=0,revision=0;
   const $=selector=>document.querySelector(selector);
   function bounds() {
     const view=window.visualViewport;
@@ -108,19 +158,21 @@
   function resize(){if(active){revealTarget();schedule()}}
   function refreshCopy() {
     const lang=ManokaraI18n.language,l=labels[lang],[title,body]=steps[index][lang];
-    root.querySelector('.tour-eyebrow').textContent=l.guide;
+    root.querySelector('.tour-eyebrow').textContent=steps===overlaySteps?l.overlayGuide:l.guide;
     root.querySelector('#tourTitle').textContent=title;root.querySelector('#tourBody').textContent=body;
     root.querySelector('.tour-progress').textContent=`${l.step} ${index+1} ${l.of} ${steps.length}`;
     root.querySelector('.tour-meter').style.width=((index+1)/steps.length*100)+'%';
     const close=root.querySelector('[data-tour="close"]');close.setAttribute('aria-label',l.close);close.title=l.close;
     root.querySelector('[data-tour="skip"]').textContent=l.skip;
     root.querySelector('[data-tour="back"]').textContent=l.back;root.querySelector('[data-tour="back"]').disabled=index===0;
-    root.querySelector('[data-tour="next"]').textContent=index===steps.length-1?l.done:l.next;
+    root.querySelector('[data-tour="next"]').textContent=index===steps.length-1?(steps===overlaySteps?l.overlayDone:l.done):l.next;
     const language=root.querySelector('select');language.value=lang;language.setAttribute('aria-label',l.language);
     schedule();
   }
   function revealTarget() {
-    const step=steps[index];adapter.showMain?.('karaoke');if(step.tab)adapter.showTab(step.tab);
+    const step=steps[index];adapter.showMain?.(steps===overlaySteps?'playlist':'karaoke');
+    if(step.overlay&&ManokaraStudio.view.target!==step.overlay)ManokaraStudio.showTarget(step.overlay);
+    if(step.tab)adapter.showTab(step.tab);
     if(step.details)$(step.details).open=true;
     const target=$(step.target);if(!target)return;
     target.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
@@ -162,10 +214,11 @@
     if(active)return;
     if(!$('#transposeDialog').hidden)$('#transposeClose').click();
     const background=[...document.querySelectorAll('.app-header,.main-tabs,#grid,#playlistStudio,.app-footer')];
-    saved={focus:document.activeElement,main:adapter.main?.()||'karaoke',tab:$('#panel-song').hidden?'output':'song',
+    saved={focus:document.activeElement,main:adapter.main?.()||'karaoke',overlay:ManokaraStudio.view,tab:$('#panel-song').hidden?'output':'song',
       details:[...document.querySelectorAll('main details')].map(node=>({node,open:node.open})),
-      scroll:[...document.querySelectorAll('main,main *')].filter(node=>node.scrollHeight>node.clientHeight||node.scrollWidth>node.clientWidth).map(node=>({node,top:node.scrollTop,left:node.scrollLeft})),
+      scroll:[...document.querySelectorAll('main,main *,#playlistStudio,#playlistStudio *')].filter(node=>node.scrollHeight>node.clientHeight||node.scrollWidth>node.clientWidth).map(node=>({node,top:node.scrollTop,left:node.scrollLeft})),
       x:scrollX,y:scrollY,background:background.map(node=>({node,inert:node.inert}))};
+    steps=saved.main==='playlist'?overlaySteps:karaokeSteps;
     saved.background.forEach(({node})=>node.inert=true);
     active=true;root.hidden=false;
     document.addEventListener('keydown',keydown,true);document.addEventListener('scroll',schedule,true);
@@ -177,7 +230,7 @@
     cancelAnimationFrame(frame);frame=0;
     document.removeEventListener('keydown',keydown,true);document.removeEventListener('scroll',schedule,true);
     window.removeEventListener('resize',resize);window.visualViewport?.removeEventListener('resize',resize);window.visualViewport?.removeEventListener('scroll',schedule);
-    saved.details.forEach(({node,open})=>node.open=open);adapter.showTab(saved.tab);adapter.showMain?.(saved.main);
+    saved.details.forEach(({node,open})=>node.open=open);adapter.showTab(saved.tab);adapter.showMain?.(saved.main);ManokaraStudio.restoreView(saved.overlay);
     saved.background.forEach(({node,inert})=>node.inert=inert);
     saved.scroll.forEach(({node,top,left})=>{node.scrollTop=top;node.scrollLeft=left});window.scrollTo({left:saved.x,top:saved.y,behavior:'instant'});
     const restore=saved.focus?.isConnected?saved.focus:$('#help');restore.focus({preventScroll:true});

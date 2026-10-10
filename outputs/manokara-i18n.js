@@ -2,6 +2,29 @@
 (() => {
   'use strict';
   const vi = {
+    'Too many requests. Try again shortly.':'Bạn vừa thử hơi nhiều lần. Chờ một chút rồi thử lại nhé.',
+    'Too many video lookups. Try again shortly.':'Máy chủ đang lấy nhạc cho vài lượt phát khác. Chờ một chút nhé.',
+    'YouTube stream lookup failed. Try again or open the video on YouTube.':'Chưa lấy được luồng nhạc YouTube. Thử lại sau hoặc mở video trên YouTube nhé.',
+    'YouTube stream lookup failed or timed out.':'Lấy luồng nhạc YouTube bị lỗi hoặc chờ quá lâu. Thử lại sau nhé.',
+    'YouTube blocked the server stream lookup. Embedded playback can still work; key shifting is unavailable for this source right now.':'YouTube đang chặn máy chủ lấy luồng nhạc. Trình phát nhúng có thể vẫn chạy, nhưng nguồn này hiện chưa đổi tông được.',
+    'YouTube is limiting stream lookups. Wait a minute before trying again.':'YouTube đang hạn chế lấy luồng nhạc. Bạn chờ khoảng một phút rồi thử lại nhé.',
+    'yt-dlp is outdated. Update the server environment with: python -m pip install -U "yt-dlp[default]".':'yt-dlp trên máy chủ đã cũ. Cập nhật trong môi trường chạy server bằng: python -m pip install -U "yt-dlp[default]".',
+    'YouTube needs an up-to-date JavaScript runtime and yt-dlp-ejs. Update "yt-dlp[default]" and use Node 22+ or Deno 2.3+.':'YouTube cần bộ xử lý JavaScript và yt-dlp-ejs mới. Hãy cập nhật "yt-dlp[default]", dùng Node từ 22 hoặc Deno từ 2.3 nhé.',
+    'This media link did not allow pitch processing. Playing the original key.':'Nguồn nhạc chưa cho phép đổi tông. App đang phát lại ở tông gốc nhé.',
+    'Key':'Tông', 'Change song key':'Đổi tông bài hát', 'Song key':'Tông bài hát',
+    'Lower key':'Giảm tông', 'Raise key':'Tăng tông', 'Original key':'Tông gốc',
+    'Saved song key in semitones':'Tông lưu cho bài hát (nửa cung)',
+    'Raise or lower the key without changing the speed. Each song remembers its own setting.':'Tăng giảm tông mà vẫn giữ tốc độ nhạc. Mỗi bài sẽ nhớ tông bạn đã chọn.',
+    'YouTube uses server playback when key shifting is on. The server needs yt-dlp, FFmpeg and Deno or Node. Media links need to allow audio processing.':'Khi đổi tông YouTube, app sẽ phát nhạc qua máy chủ. Máy chủ cần yt-dlp, FFmpeg và Deno hoặc Node. Với link media, nguồn nhạc cần cho phép xử lý âm thanh.',
+    "Try small shifts first (±1–4 semitones). Large shifts can change the sound of a full mix. Lyrics compensate for the processor's audio delay.":'Bạn thử tăng giảm ít trước nhé (±1–4 nửa cung). Đổi quá nhiều có thể làm âm thanh biến dạng. Lời hát được bù độ trễ của bộ xử lý âm thanh.',
+    'Play a song to change its key.':'Phát một bài để chỉnh tông nhé.', 'Preparing key-shifted audio…':'Đang chuẩn bị nhạc đổi tông…',
+    'Key applied. Saved for this song.':'Đã đổi tông và lưu cho bài hát này.', 'Original key.':'Đang phát ở tông gốc.',
+    'Pitch needs Chrome or Edge on HTTPS / localhost.':'Đổi tông cần Chrome hoặc Edge, mở qua HTTPS hoặc localhost nhé.',
+    'Pitch processor took too long to start. Try again.':'Bộ đổi tông khởi động hơi lâu. Bạn thử lại nhé.',
+    'This media link needs CORS permission for pitch. Use a same-origin or CORS-enabled link.':'Link nhạc này chưa cho phép xử lý âm thanh. Hãy dùng link cùng máy chủ hoặc nguồn cho phép CORS nhé.',
+    'Pitch processor stopped. Original key is playing; press a key button to retry.':'Bộ đổi tông vừa dừng. Nhạc đang phát ở tông gốc; bấm tăng hoặc giảm tông để thử lại nhé.',
+    'This source cannot change key. Use YouTube or a media link.':'Nguồn này chưa đổi tông được. Hãy dùng YouTube hoặc link media nhé.',
+    'YouTube key shifting needs server playback enabled (MANOKARA_YTDLP_ENABLED=1). See DEPLOY.md.':'Đổi tông YouTube cần bật phát qua máy chủ (MANOKARA_YTDLP_ENABLED=1). Xem hướng dẫn trong DEPLOY.md nhé.',
     'Find music on YouTube':'Tìm nhạc trên YouTube', 'Find a song on YouTube…':'Tìm bài hát trên YouTube…', 'Find a song on YouTube':'Tìm bài hát trên YouTube',
     'Prefer karaoke versions':'Ưu tiên phiên bản karaoke', 'Search YouTube':'Tìm trên YouTube', 'Close search results':'Đóng kết quả tìm kiếm', 'YouTube search results':'Kết quả tìm trên YouTube',
     '↑ ↓ to choose · Enter to select':'↑ ↓ để chọn · Enter để dùng', 'Search on YouTube':'Mở tìm trên YouTube',
@@ -65,6 +88,9 @@
     'Output appearance':'Giao diện đầu ra', 'A style for your sound':'Chọn kiểu chuyển động bạn thích', 'Visual style':'Hiệu ứng lời',
     'JIZURA Auto · full effects':'JIZURA tự động · đầy đủ hiệu ứng', 'Folia Major · original visualizers':'Folia Major · hiệu ứng gốc',
     'Tempera · ink':'Tempera · nét mực', 'Sonnet · kinetic focus':'Sonnet · chuyển động chữ', 'Lumiere · light reveal':'Lumiere · ánh sáng', 'Hanabi · character burst':'Hanabi · chữ bung nở',
+    'Sung highlight':'Màu quét',
+    'Classic karaoke · two-line sweep':'Karaoke cổ điển · quét màu hai dòng',
+    'Two alternating lines, white words and a sung highlight. Enhanced LRC follows word timestamps; regular LRC estimates the sweep. Choose Sung highlight or a color palette for the sweep (blue by default).':'Hai dòng lời thay nhau, chữ trắng và màu quét theo câu hát. LRC có mốc từng từ sẽ quét theo mốc đó; LRC thường sẽ ước lượng nhịp quét. Chọn Màu quét hoặc bảng màu để đổi màu chạy theo lời (mặc định là xanh dương).',
     'Clean fade':'Hiện / ẩn nhẹ nhàng', 'Word pop':'Chữ bật lên', 'Neon sweep':'Vệt sáng neon', 'Glitch hit':'Nhiễu glitch',
     'Background':'Nền', 'Transparent':'Trong suốt', 'Green screen':'Phông xanh', 'Color palette':'Bảng màu', 'Effect palette':'Màu của hiệu ứng',
     'White':'Trắng', 'Ice cyan':'Xanh băng', 'Rose':'Hồng', 'Amber':'Vàng hổ phách', 'Violet':'Tím', 'Mint':'Xanh bạc hà',
@@ -139,7 +165,7 @@
     'Could not open your browser session.':'Chưa mở được phiên sử dụng. Thử tải lại trang nhé.',
     'Could not open a room.':'Chưa tạo được phòng hát. Thử tải lại trang nhé.',
     'Could not replace the OBS link.':'Chưa đổi được link OBS. Thử lại nhé.',
-    'Edit lyric layout':'Chỉnh bố cục lời', 'Main workspace':'Không gian làm việc',
+    'Edit lyric layout':'Chỉnh bố cục lời', 'Main workspace':'Không gian làm việc', 'Playlist and lyrics overlays':'Overlay playlist và lời hát',
     'Previous OBS links revoked. Update both lyrics and playlist Browser Sources with their new URLs.':'Đã thu hồi các link OBS cũ. Cập nhật link mới cho cả nguồn lời và playlist trong OBS nhé.',
     'Help':'Hướng dẫn', 'Open the guided tour':'Mở hướng dẫn từng bước', 'Interface language':'Ngôn ngữ giao diện'
   };
@@ -213,7 +239,7 @@
   }
   function init() {
     // Dynamic text is refreshed by its owning module; retaining old text nodes would overwrite state.
-    const dynamic='#relayStatus,#playbackState,#now,#time,#msg,#offv,#centerHint,#audioStatus,#lyricsStatus,#transposeStatus,#ftitle,#songTabLabel,#add,#pause,#stage,#pan,#lres,#list,#lrandom';
+    const dynamic='#relayStatus,#playbackState,#now,#time,#msg,#offv,#centerHint,#audioStatus,#lyricsStatus,#pitchStatus,[data-pitch-value],#ftitle,#songTabLabel,#add,#pause,#stage,#pan,#lres,#list,#lrandom';
     document.querySelectorAll(dynamic).forEach(node=>node.setAttribute('data-no-i18n',''));
     collect(document.body,records);
     document.querySelectorAll(dynamic).forEach(node=>node.removeAttribute('data-no-i18n'));

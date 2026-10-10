@@ -152,6 +152,33 @@ The header's YouTube search also needs the updated `outputs/manokara_media.py`, 
 
 ## Source and notices
 
+### Built-in pitch / song key
+
+Include `manokara-pitch.js`, `manokara-pitch.css` and `pitch-assets/` when deploying. Restart the Python server to load its updated asset allowlist and the narrowly scoped `wasm-unsafe-eval` policy required by the bundled Signalsmith AudioWorklet (JavaScript eval is not enabled for the controller).
+
+Nonzero YouTube key uses the existing yt-dlp/FFmpeg streaming route; it requires `MANOKARA_YTDLP_ENABLED=1` and yt-dlp, FFmpeg, plus Deno or Node on the server account's PATH. The supplied VPS start script already enables streaming. For local PowerShell, enable it before starting the server:
+
+```powershell
+$env:MANOKARA_YTDLP_ENABLED="1"
+# Use Node if Deno is not installed (Node must be on PATH).
+$env:MANOKARA_YTDLP_JS_RUNTIME="node"
+.\.venv\Scripts\python.exe outputs/manokara_server.py
+```
+
+Keep your existing `MANOKARA_ORIGIN`, `MANOKARA_ALLOW_HTTP` and data-directory settings. Install the media dependencies in the same virtual environment as the server:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-media.txt
+```
+
+On Linux, use `.venv/bin/python -m pip install -r requirements-media.txt`. The server prefers the yt-dlp executable alongside its Python interpreter, avoiding an older global installation on PATH. `MANOKARA_YTDLP_PATH` overrides that choice. For YouTube's JavaScript challenges, Node must be version 22+ or Deno 2.3+; the media requirements include the compatible local EJS solver and optional Chrome impersonation support. FFmpeg must also be available. If stream lookup reports an outdated yt-dlp, update that server environment with `python -m pip install -U "yt-dlp[default,curl-cffi]"`.
+
+Successful public metadata is cached for five minutes; concurrent lookups for the same video share one extraction. Failed lookups wait up to one minute before another extraction, and the controller respects `Retry-After`. Extraction quotas still apply to new lookups; cache hits do not spend the expensive lookup quota. Stream tickets remain tied to the room and browser identity.
+
+The relay detects FFmpeg's HLS `extension_picky` option and adjusts it only for validated YouTube HLS input, whose segment URLs can lack filename extensions. HTTPS transport restrictions and metadata validation still apply. This avoids newer FFmpeg builds rejecting otherwise playable AAC segments. Restart the server after updating the media backend.
+
+YouTube can still reject stream lookups. Manokara reports lookup or processor failures and falls back to the original key; enabling pitch does not bypass those restrictions. A direct media source must permit CORS or be served from the same origin. Use Chrome/Edge over HTTPS or localhost for AudioWorklet.
+
 The public `/sources/` URLs deliberately expose the bundled Folia source archive, its integration source, and third-party licenses/notices. Links are available from the controller page. Keep them when deploying updates. Arbitrary directories, Python source, dotfiles, and symlinked files are not served. See the bundled Folia notice for upstream licensing and usage terms.
 
 To rebuild Folia, unpack the provided upstream source archive, copy `manokara-folia.tsx` and `manokara-folia.css` from `outputs/FOLIA-INTEGRATION-SOURCE` into `src/`, copy its HTML and Vite configuration into the upstream root, and copy `ObsWebSourceApp.tsx` into `src/components/obs/`. The shared `manokara-core.js` must be available in Vite's public directory. Install the upstream locked dependencies and run Vite with `vite.manokara.config.mts`. Copy the resulting `folia-assets` and generated module/preload/stylesheet tags into the output entry page, retaining its authenticated source bootstrap and shared-core script. Deploy the integration source alongside the generated bundles.

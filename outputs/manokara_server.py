@@ -35,7 +35,7 @@ MAX_SESSIONS = 1024
 SESSION_SECONDS = 30 * 86400
 WRITER_SECONDS = 15
 ROOM_ID = re.compile(r"^[a-f0-9]{32}$")
-EFFECTS = set("jizura tempera sonnet lumiere hanabi clean word-pop neon glitch".split()) | {
+EFFECTS = set("jizura karaoke-classic tempera sonnet lumiere hanabi clean word-pop neon glitch".split()) | {
     "folia-" + name for name in "classic cadenza partita fume cappella tilt claddagh monet diorama pendolo sonnet tempera lumiere".split()
 }
 
@@ -188,7 +188,8 @@ class Limiter:
         if len(self.buckets) > 10_000:
             self.buckets.popitem(last=False)
         if not accepted:
-            raise HTTPException(429, "Too many requests. Try again shortly.", headers={"Retry-After": "15"})
+            retry = max(1, math.ceil((1 - tokens) / rate))
+            raise HTTPException(429, "Too many requests. Try again shortly.", headers={"Retry-After": str(retry)})
 
 
 async def read_json(request, limit=MAX_BODY):
@@ -271,8 +272,10 @@ def asset_manifest():
              "manokara-effects.css", "manokara-effects.js", "manokara-jizura.js", "manokara-jizura-adapter.js",
              "manokara-session.js", "manokara-core.js",
              "manokara-lyrics.js", "manokara-lyrics-editor.js", "manokara-romaji-worker.js",
-             "manokara-relay.js", "manokara-audio.js"]
+             "manokara-relay.js", "manokara-audio.js", "manokara-pitch.js", "manokara-pitch.css"]
     result = {"/" + name: ROOT / name for name in names}
+    for name in ("SignalsmithStretch.mjs", "LICENSE.txt", "SOURCE.txt"):
+        result["/pitch-assets/" + name] = ROOT / "pitch-assets" / name
     for file in (ROOT / "ui-assets").iterdir():
         if file.is_file() and file.suffix in (".css", ".svg", ".woff2", ".txt"):
             result["/ui-assets/" + file.name] = file
@@ -307,10 +310,13 @@ def csp_for(path):
     # The bundled Pixi renderer generates uniform/shader functions at runtime.
     # Scope that exception to Folia's viewer document, never the controller.
     pixi_eval = " 'unsafe-eval'" if path == ROOT / "manokara-folia.html" else ""
+    # Signalsmith compiles its bundled WASM in the controller's AudioWorklet.
+    # No JavaScript eval or generated blob script is needed.
+    pitch_wasm = " 'wasm-unsafe-eval'" if path in (ROOT / "manokara.html", ROOT / "pitch-assets" / "SignalsmithStretch.mjs") else ""
     pixi_connect = " data: blob:" if path == ROOT / "manokara-folia.html" else ""
     return "; ".join([
         "default-src 'none'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'self'",
-        "form-action 'self'", "script-src 'self' " + " ".join(hashes) + pixi_eval + " https://www.youtube.com https://s.ytimg.com",
+        "form-action 'self'", "script-src 'self' " + " ".join(hashes) + pixi_eval + pitch_wasm + " https://www.youtube.com https://s.ytimg.com",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdmirror.cn/npm/@fontsource/",
         "img-src 'self' data: blob: https:", "media-src 'self' blob: https:",
@@ -323,7 +329,8 @@ class SecurityHeaders:
     def __init__(self, app, settings, manifest):
         self.app, self.settings = app, settings
         self.manifest_urls = set(manifest)
-        self.policies = {url: csp_for(path) for url, path in manifest.items() if path.suffix == ".html"}
+        self.policies = {url: csp_for(path) for url, path in manifest.items()
+                        if path.suffix == ".html" or url == "/pitch-assets/SignalsmithStretch.mjs"}
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -537,12 +544,14 @@ def create_app(settings=None):
         digest = browser_session(request)
         room_id = request.query_params.get("room")
         store.room(room_id, digest)
-        limiter.check(("youtube", digest), 2 / 60, 4)
-        limiter.check("youtube-global", 1, 8)
+        limiter.check(("youtube-request", digest), 12 / 60, 6)
         payload = await read_json(request, 1024)
         if set(payload) != {"videoId"}:
             raise HTTPException(400, "Send only a YouTube video ID.")
-        result = await media_service.resolve(payload["videoId"], room_id, digest)
+        def reserve():
+            limiter.check(("youtube", digest), 2 / 60, 4)
+            limiter.check("youtube-global", 1, 8)
+        result = await media_service.resolve(payload["videoId"], room_id, digest, reserve)
         store.room(room_id, digest)
         result["url"] = f"/__youtube/media?room={room_id}&ticket={result.pop('ticket')}"
         return JSONResponse(result)
@@ -552,11 +561,12 @@ def create_app(settings=None):
         room_id = request.query_params.get("room")
         store.room(room_id, digest)
         limiter.check(("youtube-title", digest), 6 / 60, 6)
-        limiter.check("youtube-global", 1, 8)
         payload = await read_json(request, 1024)
         if set(payload) != {"videoId"}:
             raise HTTPException(400, "Send only a YouTube video ID.")
-        result = await media_service.title(payload["videoId"])
+        def reserve():
+            limiter.check("youtube-global", 1, 8)
+        result = await media_service.title(payload["videoId"], reserve)
         store.room(room_id, digest)
         return JSONResponse(result)
 

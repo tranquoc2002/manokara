@@ -8,6 +8,7 @@ import ipaddress
 import json
 import math
 import os
+from pathlib import Path
 import re
 import secrets
 import shutil
@@ -36,6 +37,7 @@ class MediaSettings:
     firefox: bool = False
     profile: str = ""
     impersonate: str = ""
+    hls_extension_picky: bool = False
 
     @classmethod
     def from_env(cls):
@@ -53,7 +55,12 @@ class MediaSettings:
         if profile and not firefox:
             raise ValueError("MANOKARA_YTDLP_FIREFOX_PROFILE requires MANOKARA_YTDLP_FIREFOX_COOKIES=1.")
         executable = os.environ.get("MANOKARA_YTDLP_PATH", "yt-dlp")
+        # A virtualenv install must win over a stale global yt-dlp on PATH.
+        local_executable = Path(sys.executable).parent / ("yt-dlp.exe" if os.name == "nt" else "yt-dlp")
+        if "MANOKARA_YTDLP_PATH" not in os.environ and local_executable.is_file():
+            executable = str(local_executable)
         ffmpeg = os.environ.get("MANOKARA_FFMPEG_PATH", "ffmpeg")
+        hls_extension_picky = False
         if enabled:
             for name in (executable, ffmpeg, runtime):
                 if not shutil.which(name):
@@ -61,7 +68,13 @@ class MediaSettings:
             executable = shutil.which(executable)
             # yt-dlp's --ffmpeg-location takes a filesystem path, not a PATH lookup.
             ffmpeg = shutil.which(ffmpeg)
-        return cls(enabled, executable, ffmpeg, runtime, firefox, profile, impersonate)
+            # Recent FFmpeg rejects extensionless YouTube HLS audio segments.
+            # Probe once; older builds do not accept this demuxer option.
+            probe = subprocess.run([ffmpeg, "-hide_banner", "-h", "demuxer=hls"],
+                                   capture_output=True, timeout=5,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            hls_extension_picky = b"extension_picky" in probe.stdout
+        return cls(enabled, executable, ffmpeg, runtime, firefox, profile, impersonate, hls_extension_picky)
 
 
 def command(settings):
@@ -156,11 +169,15 @@ class MediaService:
         self.active = {}
         self.searches = asyncio.Semaphore(2)
         self.search_cache = OrderedDict()
+        self.lookup_cache = OrderedDict()
+        self.lookup_pending = {}
 
-    async def spawn(self, args):
+    async def spawn(self, args, *, diagnostics=False):
         options = {"start_new_session": True} if os.name != "nt" else {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
         process = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=131072, **options)
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE if diagnostics else asyncio.subprocess.DEVNULL,
+                    limit=131072, **options)
         self.processes.add(process)
         return process
 
@@ -176,11 +193,26 @@ class MediaService:
         except ProcessLookupError:
             pass
         finally:
-            await process.wait()
+            # A killed process can still have a full stdout pipe. Drain it so
+            # asyncio's wait does not hang while reaping FFmpeg/yt-dlp.
+            async def drain_output():
+                try:
+                    while await process.stdout.read(65536):
+                        pass
+                except (RuntimeError, OSError):
+                    pass  # An active stream reader will drain its own pipe.
+            await asyncio.gather(process.wait(), drain_output())
             self.processes.discard(process)
 
     async def capture(self, args, *, timeout=45):
-        process = await self.spawn(args)
+        process = await self.spawn(args, diagnostics=True)
+        async def bounded_errors():
+            result = bytearray()
+            while block := await process.stderr.read(4096):
+                if len(result) < 32768:
+                    result.extend(block[:32768 - len(result)])
+            return result.decode("utf-8", "replace").lower()
+        errors = asyncio.create_task(bounded_errors())
         try:
             process.stdin.close()
             data = bytearray()
@@ -190,28 +222,69 @@ class MediaService:
                     if len(data) > MAX_METADATA:
                         raise HTTPException(502, "YouTube metadata exceeded the lookup limit.")
                 if await process.wait():
+                    reason = await errors
+                    # Return fixed messages only; stderr may contain signed URLs, paths or cookies.
+                    if "no such option" in reason or "unrecognized arguments" in reason:
+                        raise HTTPException(503, 'yt-dlp is outdated. Update the server environment with: python -m pip install -U "yt-dlp[default]".')
+                    if "sign in to confirm" in reason or "not a bot" in reason:
+                        raise HTTPException(502, "YouTube blocked the server stream lookup. Embedded playback can still work; key shifting is unavailable for this source right now.")
+                    if "429" in reason or "too many requests" in reason:
+                        raise HTTPException(429, "YouTube is limiting stream lookups. Wait a minute before trying again.", headers={"Retry-After": "60"})
+                    if "javascript runtime" in reason or "challenge solver" in reason or "yt-dlp-ejs" in reason:
+                        raise HTTPException(503, 'YouTube needs an up-to-date JavaScript runtime and yt-dlp-ejs. Update "yt-dlp[default]" and use Node 22+ or Deno 2.3+.')
                     raise HTTPException(502, "YouTube stream lookup failed. Try again or open the video on YouTube.")
             return json.loads(data)
         except (TimeoutError, ValueError):
             raise HTTPException(502, "YouTube stream lookup failed or timed out.")
         finally:
             await self.stop(process)
+            await errors
 
-    async def lookup(self, video_id):
+    async def lookup(self, video_id, reserve=None):
         if not self.settings.enabled:
             raise HTTPException(503, "Server playback is disabled. Open this video on YouTube.")
         if not isinstance(video_id, str) or not VIDEO_ID.fullmatch(video_id):
             raise HTTPException(400, "A valid YouTube video ID is required.")
-        if self.lookups.locked():
-            raise HTTPException(429, "Too many video lookups. Try again shortly.")
-        async with self.lookups:
-            info = await self.capture(command(self.settings) + ["--skip-download", "--dump-single-json", "--", "https://www.youtube.com/watch?v=" + video_id])
-            if not isinstance(info, dict):
-                raise HTTPException(502, "YouTube returned invalid metadata.")
-            return info
+        cached = self.lookup_cache.get(video_id)
+        if cached and cached[0] > time.monotonic():
+            self.lookup_cache.move_to_end(video_id)
+            if isinstance(cached[1], HTTPException):
+                error = cached[1]
+                retry = max(1, math.ceil(cached[0] - time.monotonic()))
+                raise HTTPException(error.status_code, error.detail, headers={"Retry-After": str(retry)})
+            return cached[1]
+        pending = self.lookup_pending.get(video_id)
+        if pending is None:
+            if self.lookups.locked() or len(self.lookup_pending) >= 4:
+                raise HTTPException(429, "Too many video lookups. Try again shortly.", headers={"Retry-After": "15"})
+            if reserve:
+                reserve()  # Apply expensive-lookup quotas only when starting a real extraction.
+            async def extract():
+                try:
+                    async with self.lookups:
+                        info = await self.capture(command(self.settings) + ["--skip-download", "--dump-single-json", "--", "https://www.youtube.com/watch?v=" + video_id])
+                        if not isinstance(info, dict):
+                            raise HTTPException(502, "YouTube returned invalid metadata.")
+                        public_video(info, video_id)
+                        # Share only public extraction fields needed by title/stream selection.
+                        info = {key: info[key] for key in ("id", "_type", "title", "duration", "availability", "age_limit", "has_drm", "is_live", "live_status", "formats", "extractor", "extractor_key", "http_headers") if key in info}
+                        self.lookup_cache[video_id] = (time.monotonic() + 300, info)
+                        return info
+                except HTTPException as error:
+                    self.lookup_cache[video_id] = (time.monotonic() + 60, error)
+                    raise
+                finally:
+                    while len(self.lookup_cache) > 32:
+                        self.lookup_cache.popitem(last=False)
+                    self.lookup_pending.pop(video_id, None)
+            pending = asyncio.create_task(extract())
+            # Consume detached task failures if a requesting browser disconnects.
+            pending.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
+            self.lookup_pending[video_id] = pending
+        return await asyncio.shield(pending)
 
-    async def title(self, video_id):
-        info = await self.lookup(video_id)
+    async def title(self, video_id, reserve=None):
+        info = await self.lookup(video_id, reserve)
         public_video(info, video_id)
         title = clean_title(info.get("title"))
         if not title:
@@ -278,8 +351,8 @@ class MediaService:
             self.search_cache.popitem(last=False)
         return {"results": results}
 
-    async def resolve(self, video_id, room_id, digest):
-        info = await self.lookup(video_id)
+    async def resolve(self, video_id, room_id, digest, reserve=None):
+        info = await self.lookup(video_id, reserve)
         metadata = select_formats(info, video_id)
         for host in {media_url(f["url"]) for f in metadata["formats"]}:
             try:
@@ -309,9 +382,12 @@ class MediaService:
             raise HTTPException(429, "Too many video streams. Stop another video and try again.")
         self.active[digest] = self.active.get(digest, 0) + 1
         metadata = entry["metadata"]
+        input_args = "ffmpeg_i:-protocol_whitelist https,tls,tcp -rw_timeout 15000000"
+        if self.settings.hls_extension_picky and any(f["protocol"] == "m3u8_native" for f in metadata["formats"]):
+            input_args += " -extension_picky 0"
         args = command(self.settings) + ["--load-info-json", "-", "-f", "+".join(f["format_id"] for f in metadata["formats"]),
                 "--downloader", "ffmpeg", "--ffmpeg-location", self.settings.ffmpeg,
-                "--downloader-args", "ffmpeg_i:-protocol_whitelist https,tls,tcp -rw_timeout 15000000",
+                "--downloader-args", input_args,
                 "--downloader-args", "ffmpeg_o:-bsf:a aac_adtstoasc -movflags frag_keyframe+empty_moov+default_base_moof -f mp4",
                 "--download-sections", f"*{start}-{metadata['duration']}", "--no-part", "--no-continue", "-o", "-"]
         process = None
@@ -359,10 +435,15 @@ class MediaService:
             self.release(digest)
 
     async def close(self):
+        pending = list(self.lookup_pending.values())
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
         for process in list(self.processes):
             await self.stop(process)
         self.tickets.clear()
         self.search_cache.clear()
+        self.lookup_cache.clear()
 
 
 class MediaResponse(StreamingResponse):

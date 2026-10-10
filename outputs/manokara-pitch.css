@@ -1,0 +1,16 @@
+.key-control {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.key-control .key-label {font-size:12px;color:var(--mu)}
+.key-control output {min-width:36px;text-align:center;font-variant-numeric:tabular-nums;font-weight:650}
+.key-control button {min-height:32px;padding:5px 10px}
+.pitch-details {display:grid;gap:12px}
+.pitch-details p {margin:0}
+.pitch-details small {margin-top:0}
+.pitch-details h2 {margin:8px 0}
+.pitch-details .key-control {justify-content:center;padding:14px;border:1px solid var(--line);border-radius:12px}
+.pitch-details .key-control button {min-height:40px}
+#pitchStatus {display:block;font-size:12px;color:var(--mu);line-height:1.6}
+#pitchStatus[data-state="error"] {color:var(--ac)}
+.pitch-song-field input {width:64px}
+.transport {flex-wrap:wrap}
+.form-actions {flex-wrap:wrap}
+@media (max-width:650px) {.transport .key-control {width:100%;justify-content:center}}

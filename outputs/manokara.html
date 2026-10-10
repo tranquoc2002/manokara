@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="./manokara-tour.css">
 <link rel="stylesheet" href="./manokara-search.css">
 <link rel="stylesheet" href="./manokara-studio.css">
+<link rel="stylesheet" href="./manokara-pitch.css">
 <link rel="stylesheet" href="./manokara-playlist.css">
 </head>
 <body>
@@ -35,17 +36,19 @@
     <label class="language-control"><select id="language" aria-label="Interface language"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
     <button class="s" id="help" title="Open the guided tour" aria-haspopup="dialog"><span class="help-symbol" aria-hidden="true">?</span><span>Help</span></button>
     <div class="connection"><span data-icon="broadcast" aria-hidden="true"></span><span id="relayStatus" role="status">Connecting to OBS…</span></div>
-    <button class="s" id="transpose" title="Pitch and speed with Transpose"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>Transpose</span></button>
+    <button class="s" id="transpose" title="Change song key"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>Key</span></button>
     <button class="s" id="theme" title="Switch between light and dark theme" aria-label="Switch color theme"><span data-icon="circle-half" aria-hidden="true"></span><span>Theme</span></button>
   </div>
 </header>
-<nav class="main-tabs" role="tablist" aria-label="Main workspace"><button id="main-karaoke" role="tab" data-main-tab="karaoke" aria-controls="grid" aria-selected="true">Karaoke</button><button id="main-playlist" role="tab" data-main-tab="playlist" aria-controls="playlistStudio" aria-selected="false" tabindex="-1">Playlist</button></nav>
+<nav class="main-tabs" role="tablist" aria-label="Main workspace"><button id="main-karaoke" role="tab" data-main-tab="karaoke" aria-controls="grid" aria-selected="true">Karaoke</button><button id="main-playlist" role="tab" data-main-tab="playlist" aria-controls="playlistStudio" aria-selected="false" tabindex="-1" title="Playlist and lyrics overlays">Overlay</button></nav>
 <div id="transposeDialog" class="modal-backdrop" hidden role="presentation"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="transposeTitle">
-  <span class="eyebrow">Pitch, speed &amp; loops</span><h2 id="transposeTitle">Make it your key.</h2>
-  <p>Transpose is a browser extension for pitch, speed, and loops. Install it in the browser profile you use for Manokara.</p>
-  <ol><li>Install Transpose using the button below.</li><li>Open Manokara in a browser window with the extension toolbar visible.</li><li>Play a song, then open Transpose from the toolbar.</li></ol>
-  <p>If the extension does not detect embedded video, allow access to Manokara and YouTube, then try its <b>Tab Audio</b> mode. A new window uses your current browser profile.</p>
-  <div class="row"><button id="transposeInstall">Install Transpose<span data-icon="arrow-up-right" aria-hidden="true"></span></button><button class="s" id="transposeOpen">Open Manokara window</button><button class="ghost" id="transposeClose">Close</button></div><small id="transposeStatus" role="status"></small>
+  <div class="pitch-details"><div><span class="eyebrow">Signalsmith Stretch</span><h2 id="transposeTitle">Song key</h2></div>
+  <p>Raise or lower the key without changing the speed. Each song remembers its own setting.</p>
+  <div class="key-control"><button class="s" data-pitch-step="-1" aria-label="Lower key">−</button><output data-pitch-value aria-live="polite">0</output><button class="s" data-pitch-step="1" aria-label="Raise key">+</button><button class="ghost" data-pitch-reset>Original key</button></div>
+  <small id="pitchStatus" role="status" aria-live="polite"></small>
+  <p>YouTube uses server playback when key shifting is on. The server needs yt-dlp, FFmpeg and Deno or Node. Media links need to allow audio processing.</p>
+  <small>Try small shifts first (±1–4 semitones). Large shifts can change the sound of a full mix. Lyrics compensate for the processor's audio delay.</small>
+  <div class="row"><button class="s" id="transposeClose">Close</button></div></div>
 </section></div>
 <div id="warn" hidden><b>Open Manokara through its configured server URL.</b> The lyric relay requires the Python server. See DEPLOY.md for setup.</div>
 <main id="grid" tabindex="-1" role="tabpanel" aria-labelledby="main-karaoke">
@@ -66,7 +69,7 @@
         <button class="ghost" id="pause"><span data-icon="pause" aria-hidden="true"></span><span>Pause</span></button>
         <button class="ghost icon-button" id="next" title="Next song" aria-label="Next song"><span data-icon="skip-forward" aria-hidden="true"></span></button>
         <button class="ghost" id="stop"><span data-icon="stop" aria-hidden="true"></span><span>Stop</span></button>
-      </div><label class="volume-control"><span data-icon="speaker-high" aria-hidden="true"></span><input type="range" id="vol" min="0" max="100" value="100" aria-label="Volume"></label></div>
+      </div><div class="key-control" aria-label="Song key"><span class="key-label">Key</span><button class="ghost" data-pitch-step="-1" aria-label="Lower key">−</button><output data-pitch-value>0</output><button class="ghost" data-pitch-step="1" aria-label="Raise key">+</button><button class="ghost" data-pitch-reset title="Original key">↺</button></div><label class="volume-control"><span data-icon="speaker-high" aria-hidden="true"></span><input type="range" id="vol" min="0" max="100" value="100" aria-label="Volume"></label></div>
       <div class="player-options"><div class="row"><label class="inline-check"><input type="checkbox" id="skip" checked>Skip unavailable songs</label><label class="countdown-control">Countdown<input type="number" id="cdn" min="0" max="30" value="5" aria-label="Countdown seconds">s</label></div><div id="msg" role="status" aria-live="polite"></div></div>
     </section>
     <section class="card" id="workspace" aria-label="Song and output settings">
@@ -82,7 +85,7 @@
             <details id="romajiDetails"><summary>Review / edit Romaji</summary><small>Edit readings only. Keep timestamps, metadata and blank lines unchanged. In dual mode, Romaji appears below the original words.</small><textarea id="romajiLrc" aria-label="Romaji lyrics LRC" maxlength="200000" spellcheck="false"></textarea><button class="s" id="exportRomaji"><span data-icon="download-simple" aria-hidden="true"></span>Download Romaji LRC</button></details><small id="lyricsStatus" role="status" aria-live="polite"></small>
           </div>
         </section>
-        <div class="form-actions"><label>Lyric offset<input type="number" id="loff" step="0.1" value="0" aria-label="Lyric offset in seconds">s</label><div class="row"><button class="ghost" id="cancel" hidden>Cancel edit</button><button id="add"><span data-icon="plus" aria-hidden="true"></span><span>Add to setlist</span></button></div></div>
+        <div class="form-actions"><label class="pitch-song-field">Song key<input id="songKey" type="number" min="-12" max="12" step="1" value="0" aria-label="Saved song key in semitones"></label><label>Lyric offset<input type="number" id="loff" step="0.1" value="0" aria-label="Lyric offset in seconds">s</label><div class="row"><button class="ghost" id="cancel" hidden>Cancel edit</button><button id="add"><span data-icon="plus" aria-hidden="true"></span><span>Add to setlist</span></button></div></div>
         <details id="mcDetails"><summary>Add an MC break</summary><div class="row"><input id="mcm" maxlength="4096" placeholder="Your note or announcement" aria-label="MC break note"><input id="mcd" placeholder="00:30" aria-label="MC break duration"><button class="s" id="addmc"><span data-icon="plus" aria-hidden="true"></span>Add break</button></div></details>
       </section>
       <section class="tabpanel" id="panel-green" role="tabpanel" aria-labelledby="tab-output" hidden>
@@ -91,10 +94,10 @@
         <div class="obs-note"><small>Paste this into an OBS Browser Source. Keep it active.</small><button class="ghost" id="rotateobs" title="Revoke the previous OBS link and create a new one">Replace link</button></div>
         <button class="s" id="editLyricLayout">Edit lyric layout</button>
         <section class="section-divider" aria-label="Output appearance"><h3>A style for your sound</h3><div class="settings-grid">
-          <label class="field wide"><span>Visual style</span><select id="lfx"><option value="jizura">JIZURA Auto · full effects</option><optgroup label="Folia Major · original visualizers"><option value="folia-classic">Folia · Luminous</option><option value="folia-cadenza">Folia · Mindscape</option><option value="folia-partita">Folia · Cloud Steps</option><option value="folia-fume">Folia · Fume</option><option value="folia-cappella">Folia · Cappella</option><option value="folia-tilt">Folia · Tilt</option><option value="folia-claddagh">Folia · Claddagh</option><option value="folia-monet">Folia · Monet</option><option value="folia-diorama">Folia · Diorama</option><option value="folia-pendolo">Folia · Pendolo</option><option value="folia-sonnet">Folia · Sonnet</option><option value="folia-tempera">Folia · Tempera</option><option value="folia-lumiere">Folia · Lumiere</option></optgroup><option value="tempera">Tempera · ink</option><option value="sonnet">Sonnet · kinetic focus</option><option value="lumiere">Lumiere · light reveal</option><option value="hanabi">Hanabi · character burst</option><option value="clean">Clean fade</option><option value="word-pop">Word pop</option><option value="neon">Neon sweep</option><option value="glitch">Glitch hit</option></select></label>
+          <label class="field wide"><span>Visual style</span><select id="lfx"><option value="jizura">JIZURA Auto · full effects</option><option value="karaoke-classic">Classic karaoke · two-line sweep</option><optgroup label="Folia Major · original visualizers"><option value="folia-classic">Folia · Luminous</option><option value="folia-cadenza">Folia · Mindscape</option><option value="folia-partita">Folia · Cloud Steps</option><option value="folia-fume">Folia · Fume</option><option value="folia-cappella">Folia · Cappella</option><option value="folia-tilt">Folia · Tilt</option><option value="folia-claddagh">Folia · Claddagh</option><option value="folia-monet">Folia · Monet</option><option value="folia-diorama">Folia · Diorama</option><option value="folia-pendolo">Folia · Pendolo</option><option value="folia-sonnet">Folia · Sonnet</option><option value="folia-tempera">Folia · Tempera</option><option value="folia-lumiere">Folia · Lumiere</option></optgroup><option value="tempera">Tempera · ink</option><option value="sonnet">Sonnet · kinetic focus</option><option value="lumiere">Lumiere · light reveal</option><option value="hanabi">Hanabi · character burst</option><option value="clean">Clean fade</option><option value="word-pop">Word pop</option><option value="neon">Neon sweep</option><option value="glitch">Glitch hit</option></select></label>
           <label class="field"><span>Background</span><select id="lbgmode"><option value="transparent">Transparent</option><option value="green">Green screen</option></select></label><label class="field"><span>Color palette</span><select id="ltheme"><option value="effect">Effect palette</option><option value="white">White</option><option value="cyan">Ice cyan</option><option value="rose">Rose</option><option value="amber">Amber</option><option value="violet">Violet</option><option value="mint">Mint</option></select></label>
-          <label class="field"><span>Text size</span><div class="settings-inline"><input type="range" id="lsz" min="24" max="160" value="64" aria-label="Output text size"></div></label><label class="field"><span>Text color</span><input type="color" id="lcol" value="#ffffff"></label>
-        </div><div class="row spaced"><button class="s" id="lrandom" title="Randomize JIZURA lyric motion"><span data-icon="shuffle" aria-hidden="true"></span>Shuffle JIZURA style</button></div>
+          <label class="field"><span>Text size</span><div class="settings-inline"><input type="range" id="lsz" min="24" max="160" value="64" aria-label="Output text size"></div></label><label class="field"><span>Text color</span><input type="color" id="lcol" value="#ffffff"></label><label id="classicColorField" class="field" hidden><span>Sung highlight</span><input type="color" id="lclassiccolor" value="#2563eb"></label>
+        </div><small id="classicHint" hidden>Two alternating lines, white words and a sung highlight. Enhanced LRC follows word timestamps; regular LRC estimates the sweep. Choose Sung highlight or a color palette for the sweep (blue by default).</small><div class="row spaced"><button class="s" id="lrandom" title="Randomize JIZURA lyric motion"><span data-icon="shuffle" aria-hidden="true"></span>Shuffle JIZURA style</button></div>
         <div class="output-reaction"><button class="s" id="audioReaction">Enable audio reaction</button><small id="audioStatus">Share the karaoke tab with tab audio enabled. No recording.</small></div></section>
         <section class="section-divider" aria-label="Output typography"><h3>Type &amp; layout</h3><div class="type-settings"><label class="field"><span>Font family</span><select id="lfont"></select></label><label class="field"><span>Custom font</span><input id="lfc" maxlength="120" placeholder="An installed or Google font"></label><label class="inline-check"><input type="checkbox" id="lbold" checked>Bold lyrics</label></div><small class="setting-help">Fonts marked “online” load from Google Fonts. Installed fonts work locally.</small>
         <div id="centerRow"><div class="layout-options"><div class="row"><label class="inline-check"><input type="checkbox" id="lcenter">Keep centre free</label><label class="field"><span>Output frame</span><select id="lshape"><option value="auto">Automatic</option><option value="wide">Landscape</option><option value="tall">Portrait</option></select></label></div><div class="cf-preview" id="cfpreview" data-shape="wide" title="The outlined area stays clear for a character"><span class="cf-free"></span><i class="cf-line cf-a"></i><i class="cf-line cf-b"></i></div></div><small id="centerHint">Lyrics alternate around the open centre in supported effects.</small></div></section>
@@ -115,6 +118,7 @@
 <script src="./manokara-search.js"></script>
 <script src="./manokara-core.js"></script>
 <script src="./manokara-audio.js"></script>
+<script src="./manokara-pitch.js"></script>
 <script src="./manokara-lyrics.js"></script>
 <script src="./manokara-lyrics-editor.js"></script>
 <script src="./manokara-session.js"></script>
@@ -146,11 +150,13 @@ const fmt=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padSta
 const tp=ManokaraCore.timeValue;
 let items=[],ci=null,pos=0,last=-1,mode='',counting=false,cdLeft=0,cdLast=0,cdT,fbPend=null,tick,dur=null,media=null,yt=null,ytOk=false,tok=0,paused=false,acc=0,runAt=null,edit=-1,res=[];
 let mediaLookup=null,mediaStart=0;
-let searchState='',transposeMessage='';
+let searchState='',pitchBusy=false,pitchMessage='Play a song to change its key.';
+const pitch=ManokaraPitch.create(text=>{if(ci&&!ci.mc){ci.pitch=0;save();render()}pitchMessage=text;refreshPitch('error')});
+function refreshPitch(state=null){const key=ci&&!ci.mc?ManokaraPitch.clamp(ci.pitch):0;document.querySelectorAll('[data-pitch-value]').forEach(el=>el.textContent=key>0?'+'+key:String(key));document.querySelectorAll('[data-pitch-step],[data-pitch-reset]').forEach(el=>el.disabled=!ci||!!ci.mc||pitchBusy||!!mediaLookup||(el.dataset.pitchStep==='-1'&&key<=-12)||(el.dataset.pitchStep==='1'&&key>=12));$('#pitchStatus').textContent=uiText(pitchMessage);if(state!==null)$('#pitchStatus').dataset.state=state;}
 let generatedTitle='';const youtubeTitles=new Map();
 try{const saved=JSON.parse(localStorage.getItem('kpt2')||'[]');if(Array.isArray(saved))items=saved.filter(it=>it&&typeof it==='object'&&(it.mc||typeof it.url==='string')).map(it=>{
  const number=(v,otherwise=0)=>Number.isFinite(Number(v))?Number(v):otherwise;
- return {...it,title:String(it.title||it.url||'').slice(0,512),memo:String(it.memo||'').slice(0,4096),lrc:String(it.lrc||''),s:Math.max(0,number(it.s)),e:it.e==null?null:number(it.e,null),off:number(it.off),dur:it.dur==null?null:number(it.dur,null)};
+ return {...it,title:String(it.title||it.url||'').slice(0,512),memo:String(it.memo||'').slice(0,4096),lrc:String(it.lrc||''),s:Math.max(0,number(it.s)),e:it.e==null?null:number(it.e,null),off:number(it.off),pitch:ManokaraPitch.clamp(it.pitch),dur:it.dur==null?null:number(it.dur,null)};
 })}catch(e){}
 let timelineVersion=Date.now();
 const save=()=>{try{localStorage.setItem('kpt2',JSON.stringify(items,(k,v)=>k==='_L'?undefined:v));return true}catch(e){msg('Browser storage is full or unavailable. Changes remain in this window only.');return false}};
@@ -200,7 +206,7 @@ const cdv=()=>Math.max(0,Math.min(30,Math.floor(+$('#cdn').value)||0));
 function setPauseUI(p){paused=p;$('#pause').innerHTML=icon(p?'play':'pause')+'<span>'+(p?uiText('Resume'):uiText('Pause'))+'</span>';updatePlaybackState()}
 function updatePlaybackState(){const el=$('#playbackState');const state=!ci?'ready':counting?'countdown':paused?'paused':mediaPlaying()?'playing':'ready';el.dataset.state=state;el.textContent=({ready:ci?uiText('Ready'):uiText('Ready when you are'),countdown:uiText('Starting soon'),paused:uiText('Paused'),playing:uiText('Playing')})[state]}
 function mediaPlaying(){if(!ci||ci.mc||counting||paused)return false;if(mode==='media')return !!media&&!media.paused&&!media.ended&&media.readyState>=2;if(mode==='yt'){try{return ytOk&&yt.getPlayerState()===1}catch(e){return false}}return runAt!=null}
-function playMedia(){if(media)media.play().catch(()=>{setPauseUI(true);msg('Playback was blocked. Press Play to start the media.')})}
+async function playMedia(){const el=media,my=tok;if(!el||pitchBusy)return;try{if(pitch.element===el)await pitch.resume();if(my===tok&&media===el)await el.play()}catch(error){if(my===tok&&media===el){setPauseUI(true);if(error.name==='NotAllowedError')msg('Playback was blocked. Press Play to start the media.');else if(error.name!=='AbortError')playbackFailure('Server video stream could not play. Try again.',my)}}}
 const clkEl=()=>acc+(runAt!=null?(Date.now()-runAt)/1000:0);
 function loadYT(){if(window.YT&&YT.Player)return Promise.resolve(true);
  return new Promise(r=>{const prev=window.onYouTubeIframeAPIReady;window.onYouTubeIframeAPIReady=()=>{prev&&prev();r(true)};
@@ -209,7 +215,7 @@ function loadYT(){if(window.YT&&YT.Player)return Promise.resolve(true);
 function ovShow(){let o=$('#ov');if(!counting||!ci){if(o)o.remove();return}
  if(!o){o=document.createElement('div');o.id='ov';$('#stage').appendChild(o)}
  o.innerHTML='<b>'+esc(ci.title)+'</b><span>'+Math.max(1,Math.ceil(cdLeft))+uiMarkup('</span><small>Press Play to start now</small>')}
-function clearAll(){clearInterval(tick);clearInterval(cdT);tok++;timelineVersion++;counting=false;fbPend=null;mediaLookup?.abort();mediaLookup=null;if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;if(media){try{media.pause();media.removeAttribute('src');media.load()}catch(e){}}media=null;mediaStart=0;runAt=null;acc=0;
+function clearAll(){pitch.detach();pitchBusy=false;clearInterval(tick);clearInterval(cdT);tok++;timelineVersion++;counting=false;fbPend=null;mediaLookup?.abort();mediaLookup=null;if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;if(media){try{media.pause();media.removeAttribute('src');media.load()}catch(e){}}media=null;mediaStart=0;runAt=null;acc=0;
  $('#stage').innerHTML=stageEmpty();$('#time').textContent='00:00 / 00:00';$('#yt').hidden=true;setPauseUI(false)}
 function endCount(my){if(my!==tok||!counting)return;counting=false;setPauseUI(false);clearInterval(cdT);ovShow();
  if(fbPend){const f=fbPend;fbPend=null;fbFrame(f[0],f[1]);return}
@@ -219,27 +225,64 @@ function fbFrame(id,it){mode='clk';
  $('#stage').innerHTML='<iframe referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen src="https://www.youtube.com/embed/'+id+'?autoplay=1&start='+Math.floor(it.s||0)+(it.e!=null?'&end='+Math.ceil(it.e):'')+'"></iframe>';
  acc=0;runAt=Date.now();msg('YouTube API could not load: Pause is unavailable and lyric timing is approximate.')}
 function playbackFailure(text,my){if(my!==tok)return;msg(text+' Open it on YouTube to check.');if($('#skip').checked)setTimeout(()=>{if(my===tok)go(nxt())},1500)}
-async function startServerVideo(id,it,my){
+async function startServerVideo(id,it,my,options={}){
  if(my!==tok||mediaLookup)return;
- const controller=new AbortController();mediaLookup=controller;
- msg('Embedded playback is unavailable. Trying server playback…');
+ const keyRequest=!!options.keyRequest, resumeAt=Math.max(0,options.resumeAt||0),wasPaused=!!options.wasPaused;
+ const controller=new AbortController();mediaLookup=controller;refreshPitch();
+ if(keyRequest){pitchBusy=true;pitchMessage='Preparing key-shifted audio…';refreshPitch();try{yt?.pauseVideo()}catch(_){}setPauseUI(true)}
+ else msg('Embedded playback is unavailable. Trying server playback…');
  try{
+  if(keyRequest)await pitch.prepare();
   await relayReady;if(my!==tok)return;
-  const r=await window.ManokaraSession.api(relayUrl('/__youtube'),{videoId:id},{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(55000)])});
-  const data=await r.json();if(my!==tok)return;if(!r.ok)throw Error(data.error||'Server playback is unavailable.');
+  const data=await ManokaraPitch.lookup(window.ManokaraSession.api,relayUrl('/__youtube'),id,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(55000)])});
+  if(my!==tok)return;
   applySongTitle(it,data.title);
-  if(yt){try{yt.destroy()}catch(e){}yt=null}ytOk=false;
   const source=new URL(data.url,location.origin);if(source.origin!==location.origin||source.pathname!=='/__youtube/media')throw Error('Invalid video stream.');
-  source.searchParams.set('start',String(it.s||0));
-  const el=document.createElement('video');el.src=source.href;el.controls=true;el.playsInline=true;el.autoplay=!counting&&!paused;el.volume=+$('#vol').value/100;
-  it.mediaDuration=Math.max(0,data.duration-(it.s||0));dur=it.e!=null?it.e-(it.s||0):it.mediaDuration;mediaStart=0;
-  el.onplay=()=>{if(my===tok)setPauseUI(false)};el.onpause=()=>{if(my===tok&&!counting)setPauseUI(true)};el.onseeked=()=>{if(my===tok)timelineVersion++};
-  el.onended=()=>{if(my!==tok)return;if(el.currentTime+3<it.mediaDuration&&(it.e==null||el.currentTime+3<dur))playbackFailure('Server video stream was interrupted.',my);else go(nxt())};
+  source.searchParams.set('start',String((it.s||0)+resumeAt));
+  const el=document.createElement('video');el.src=source.href;el.controls=!it.pitch;el.playsInline=true;el.autoplay=false;el.volume=+$('#vol').value/100;
+  it.mediaDuration=Math.max(0,data.duration-(it.s||0));dur=it.e!=null?it.e-(it.s||0):it.mediaDuration;mediaStart=-resumeAt;
+  if(yt){try{yt.destroy()}catch(_){}yt=null}ytOk=false;
+  $('#stage').replaceChildren(el);media=el;mode='media';
+  el.onplay=()=>{if(my===tok)setPauseUI(false)};el.onpause=()=>{if(my===tok&&!counting)setPauseUI(true)};
+  el.onseeked=()=>{if(my===tok){timelineVersion++;pitch.flush()}};
+  el.onended=()=>{if(my!==tok)return;if(el.currentTime+resumeAt+3<it.mediaDuration&&(it.e==null||el.currentTime+resumeAt+3<dur))playbackFailure('Server video stream was interrupted.',my);else finishMedia(my)};
   el.onerror=()=>playbackFailure('Server video stream could not play. Try again.',my);
-  $('#stage').replaceChildren(el);media=el;mode='media';timelineVersion++;ovShow();msg('Playing video through the server.');
- }catch(error){if(my===tok&&!controller.signal.aborted)playbackFailure(error.message,my)}
- finally{if(mediaLookup===controller)mediaLookup=null}
+  if(it.pitch){pitchBusy=true;refreshPitch();await pitch.attach(el,it.pitch,()=>my===tok&&media===el)}
+  if(my!==tok)return;
+  pitchBusy=false;el.controls=true;if(keyRequest)setPauseUI(wasPaused);
+  pitchMessage=it.pitch?'Key applied. Saved for this song.':'Original key.';refreshPitch('');
+  timelineVersion++;ovShow();msg('Playing video through the server.');
+  if(!counting&&!paused)playMedia();
+ }catch(error){if(my===tok&&!controller.signal.aborted){
+  if(keyRequest){it.pitch=0;save();pitchBusy=false;pitchMessage=error.message==='Server playback is disabled. Open this video on YouTube.'?'YouTube key shifting needs server playback enabled (MANOKARA_YTDLP_ENABLED=1). See DEPLOY.md.':error.message;refreshPitch('error');msg(pitchMessage);render();
+   if(media){media.controls=true;if(pitch.element===media)await pitch.set(0);setPauseUI(wasPaused);if(!counting&&!wasPaused)playMedia()}
+   else if(yt&&ytOk){setPauseUI(wasPaused);if(!counting&&!wasPaused)yt.playVideo()}
+   else{setPauseUI(wasPaused);startYT(id,it,my)}
+  }else playbackFailure(error.message,my);
+ }}finally{if(mediaLookup===controller)mediaLookup=null;if(my===tok){pitchBusy=false;refreshPitch($('#pitchStatus').dataset.state)}}
 }
+function finishMedia(my){setTimeout(()=>{if(my===tok&&media?.ended)go(nxt())},Math.ceil(pitch.delay*1000));}
+async function prepareMedia(el,it,my){
+ if(!it.pitch){if(!counting&&!paused)playMedia();return;}
+ pitchBusy=true;el.controls=false;pitchMessage='Preparing key-shifted audio…';refreshPitch();
+ try{await pitch.attach(el,it.pitch,()=>my===tok&&media===el);if(my!==tok)return;pitchMessage='Key applied. Saved for this song.';refreshPitch('');}
+ catch(error){if(my!==tok)return;it.pitch=0;save();pitchMessage=error.message;msg(pitchMessage);refreshPitch('error');}
+ finally{if(my===tok){el.controls=true;pitchBusy=false;refreshPitch($('#pitchStatus').dataset.state);if(!counting&&!paused)playMedia()}}
+}
+async function changeKey(value){
+ const it=ci,my=tok;if(!it||it.mc||pitchBusy||mediaLookup)return;
+ const key=ManokaraPitch.clamp(value);if(key===ManokaraPitch.clamp(it.pitch))return;
+ const before=ManokaraPitch.clamp(it.pitch);it.pitch=key;save();render();if(edit>=0&&items[edit]===it)$('#songKey').value=key;
+ if(mode==='yt'||mode==='clk'&&yid(it.url)){if(!key){refreshPitch();return}const resumeAt=elapsed(),wasPaused=paused;await startServerVideo(yid(it.url),it,my,{keyRequest:true,resumeAt,wasPaused});return;}
+ if(!media){it.pitch=before;save();pitchMessage='This source cannot change key. Use YouTube or a media link.';refreshPitch('error');return;}
+ pitchBusy=true;pitchMessage='Preparing key-shifted audio…';refreshPitch();
+ try{if(pitch.element!==media){if(key)await pitch.attach(media,key,()=>my===tok&&ci===it)}else await pitch.set(key);
+  if(my!==tok)return;timelineVersion++;pitchMessage=key?'Key applied. Saved for this song.':'Original key.';refreshPitch('');
+ }catch(error){if(my!==tok)return;it.pitch=pitch.key;save();pitchMessage=error.message;refreshPitch('error');msg(pitchMessage);}
+ finally{if(my===tok){pitchBusy=false;render();refreshPitch($('#pitchStatus').dataset.state)}}
+}
+document.querySelectorAll('[data-pitch-step]').forEach(button=>button.onclick=()=>changeKey((ci?.pitch||0)+Number(button.dataset.pitchStep)));
+document.querySelectorAll('[data-pitch-reset]').forEach(button=>button.onclick=()=>changeKey(0));
 function startYT(id,it,my){$('#stage').innerHTML='<div id="ytp"></div>';
  loadYT().then(ok=>{if(my!==tok)return;if(!ok){fbFrame(id,it);return}
   const pv={origin:location.origin,autoplay:counting?0:1,start:Math.floor(it.s||0),playsinline:1,rel:0};if(it.e!=null)pv.end=Math.ceil(it.e);
@@ -248,41 +291,42 @@ function startYT(id,it,my){$('#stage').innerHTML='<div id="ytp"></div>';
    onStateChange:e=>{if(my!==tok||counting)return;if(e.data===0)go(nxt());else if(e.data===1){takeRelayOwnership();setPauseUI(false)}else if(e.data===2)setPauseUI(true)},
    onError:e=>{if(my!==tok)return;const code=Number(e?.data);if([5,101,150].includes(code)){startServerVideo(id,it,my);return}const reason=({2:'Invalid video ID or URL.',100:'Video is unavailable, private, or has been removed.',153:'YouTube did not receive a referrer/client identity. Open Manokara from localhost or HTTPS, not file://.'})[code]||'YouTube could not play this video.';playbackFailure(`YouTube error ${code||'unknown'}: ${reason}`,my)}}})})}
 function go(i){takeRelayOwnership();clearAll();pk='';
- if(i<0||i>=items.length){if(ci){const k=idx();last=k>=0?k:pos}if(i>=items.length)last=-1;ci=null;mode='';$('#now').textContent=uiText('Nothing playing yet');render();updPan();updatePlaybackState();if(i>=items.length)msg('Setlist finished. Ready for another song?');return}
- ci=items[i];pos=i;last=i;const it=ci,st=$('#stage'),my=tok;render();msg('');$('#now').textContent=it.mc?uiText('MC break'):it.title;dur=null;acc=0;runAt=null;
+ if(i<0||i>=items.length){if(ci){const k=idx();last=k>=0?k:pos}if(i>=items.length)last=-1;ci=null;mode='';pitchMessage='Play a song to change its key.';refreshPitch('');$('#now').textContent=uiText('Nothing playing yet');render();updPan();updatePlaybackState();if(i>=items.length)msg('Setlist finished. Ready for another song?');return}
+ ci=items[i];pitchMessage=ci.pitch?'Preparing key-shifted audio…':'Original key.';refreshPitch('');pos=i;last=i;const it=ci,st=$('#stage'),my=tok;render();msg('');$('#now').textContent=it.mc?uiText('MC break'):it.title;dur=null;acc=0;runAt=null;
  fetchSongTitle(it);
  const id=it.mc?null:yid(it.url),isM=!it.mc&&!id&&/\.(mp4|mp3|wav|ogg|m4a|aac|flac)(\?|$)/i.test(it.url),n=(id||isM)?cdv():0;
  if(n>0){counting=true;cdLeft=n;cdLast=Date.now()}
  if(it.mc){mode='clk';runAt=Date.now();st.innerHTML='<div class="stage-empty mc-stage"><div class="stage-glyph">'+icon('microphone-stage')+uiMarkup('</div><h2>MC break</h2><p>')+esc(it.memo||uiText('Take a moment between songs.'))+'</p></div>';dur=it.dur}
  else{dur=it.e!=null?it.e-(it.s||0):null;
-  if(id){mode='yt';$('#yt').href='https://www.youtube.com/watch?v='+id+'&t='+Math.floor(it.s||0);$('#yt').hidden=false;startYT(id,it,my)}
-  else if(isM){mode='media';mediaStart=it.s||0;const el=document.createElement('video');el.src=it.url;el.controls=true;el.autoplay=!counting;el.volume=$('#vol').value/100;
-   el.onloadedmetadata=()=>{if(my!==tok)return;it.mediaDuration=Number.isFinite(el.duration)?Math.max(0,el.duration-(it.s||0)):undefined;el.currentTime=it.s||0};el.onseeked=()=>{timelineVersion++};el.onended=()=>go(nxt());el.onplay=()=>setPauseUI(false);el.onpause=()=>{if(!counting)setPauseUI(true)};
-   el.onerror=()=>{msg('Could not load this media.');if($('#skip').checked)setTimeout(()=>{if(my===tok)go(nxt())},1500)};st.innerHTML='';st.appendChild(el);media=el}
+  if(id){mode='yt';$('#yt').href='https://www.youtube.com/watch?v='+id+'&t='+Math.floor(it.s||0);$('#yt').hidden=false;if(it.pitch)startServerVideo(id,it,my,{keyRequest:true,wasPaused:false});else startYT(id,it,my)}
+  else if(isM){mode='media';mediaStart=it.s||0;const el=document.createElement('video');if(it.pitch&&new URL(it.url).origin!==location.origin)el.crossOrigin='anonymous';el.src=it.url;el.controls=true;el.autoplay=false;el.volume=$('#vol').value/100;
+   el.onloadedmetadata=()=>{if(my!==tok)return;it.mediaDuration=Number.isFinite(el.duration)?Math.max(0,el.duration-(it.s||0)):undefined;el.currentTime=it.s||0};el.onseeked=()=>{if(my===tok){timelineVersion++;pitch.flush()}};el.onended=()=>{if(my===tok)finishMedia(my)};el.onplay=()=>{if(my===tok){if(pitch.element===el)pitch.resume().catch(()=>{});setPauseUI(false)}};el.onpause=()=>{if(my===tok&&!counting)setPauseUI(true)};
+   el.onerror=()=>{if(my!==tok)return;if(it.pitch&&el.crossOrigin==='anonymous'){it.pitch=0;save();const at=items.indexOf(it);if(at>=0){go(at);msg('This media link did not allow pitch processing. Playing the original key.');return}}msg('Could not load this media.');if($('#skip').checked)setTimeout(()=>{if(my===tok)go(nxt())},1500)};st.innerHTML='';st.appendChild(el);media=el;prepareMedia(el,it,my)}
   else{mode='clk';runAt=Date.now();st.innerHTML='<div class="stage-empty"><div class="stage-glyph">'+icon('link')+uiMarkup('</div><h2>Open this link to play.</h2><p>This media opens in a new tab. Your lyric clock is running here.</p><a class="stage-add" href="')+esc(it.url)+'" target="_blank" rel="noopener">'+uiText('Open media ')+icon('arrow-up-right')+'</a></div>'}}
  if(counting){ovShow();$('#time').textContent=uiText('Starting in ')+n+' s';
   cdT=setInterval(()=>{if(my!==tok){clearInterval(cdT);return}const now=Date.now();if(!paused)cdLeft-=(now-cdLast)/1000;cdLast=now;
    if(cdLeft<=0){endCount(my);return}ovShow();$('#time').textContent=uiText('Starting in ')+Math.ceil(cdLeft)+' s'},100)}
- tick=setInterval(()=>{updatePlaybackState();if(counting)return;const e=elapsed();if(dur!=null&&e>=dur){go(nxt());return}$('#time').textContent=fmt(e)+' / '+(dur!=null?fmt(dur):'--:--')},250);
+ tick=setInterval(()=>{updatePlaybackState();if(counting)return;const e=elapsed();if(dur!=null&&audibleElapsed()>=dur){go(nxt());return}$('#time').textContent=fmt(e)+' / '+(dur!=null?fmt(dur):'--:--')},250);
  updPan()}
 function elapsed(){const it=ci;if(!it||counting)return 0;
  if(mode==='media')return media?media.currentTime-mediaStart:0;
  if(mode==='yt'){if(!yt||!ytOk)return 0;try{return yt.getCurrentTime()-(it.s||0)}catch(e){return 0}}
  return clkEl()}
-function render(){showOff();$('#setlistCount').textContent=items.length;$('#setlistEmpty').hidden=items.length>0;$('#clr').disabled=!items.length;
+function audibleElapsed(){return Math.max(0,elapsed()-(mode==='media'?pitch.delay:0))}
+function render(){showOff();refreshPitch();$('#setlistCount').textContent=items.length;$('#setlistEmpty').hidden=items.length>0;$('#clr').disabled=!items.length;
  $('#list').innerHTML=items.map((it,i)=>{const title=it.mc?uiText('MC break · ')+(it.memo||uiText('Announcement')):it.title,duration=it.mc?it.dur:it.e!=null?it.e-(it.s||0):it.mediaDuration,kind=it.mc?uiText('MC break'):yid(it.url)?'YouTube':uiText('Media');return '<li class="'+(it===ci?'on':'')+'" data-i="'+i+'"><span class="song-number">'+String(i+1).padStart(2,'0')+'</span><button class="t" data-a="go" title="'+esc(title)+'" aria-pressed="'+(it===ci)+'"><span class="song-name">'+esc(title)+'</span></button><small class="song-meta">'+kind+(it.lrc?uiText(' · Lyrics ready'):'')+(Number.isFinite(duration)?' · '+fmt(duration):'')+'</small><div class="list-actions">'+(it.mc?'':uiMarkup('<button class="ghost" data-a="ed" title="Edit song" aria-label="Edit song">')+icon('pencil-simple')+'</button>')+uiMarkup('<button class="ghost" data-a="up" title="Move up" aria-label="Move song up"')+(i===0?' disabled':'')+'>'+icon('arrow-up')+uiMarkup('</button><button class="ghost" data-a="dn" title="Move down" aria-label="Move song down"')+(i===items.length-1?' disabled':'')+'>'+icon('arrow-down')+uiMarkup('</button><button class="ghost" data-a="del" title="Remove from setlist" aria-label="Remove from setlist">')+icon('x')+'</button></div></li>'}).join('')}
 $('#list').onclick=e=>{const b=e.target.closest('[data-a]');if(!b)return;const i=+b.closest('li').dataset.i,a=b.dataset.a;
- if(a==='go')go(i);else if(a==='ed'){showStudioTab('song');edit=i;generatedTitle='';const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#lq').value=it.title;lyricEditor.load(it);$('#add').innerHTML=icon('check')+uiMarkup('<span>Save changes</span>');$('#ftitle').textContent=uiText('Edit song');$('#songTabLabel').textContent=uiText('Edit song');$('#cancel').hidden=false;$('#ftitle').scrollIntoView({block:'nearest'})}
+ if(a==='go')go(i);else if(a==='ed'){showStudioTab('song');edit=i;generatedTitle='';const it=items[i];$('#url').value=it.url;$('#ttl').value=it.title;$('#st').value=it.s?fmt(it.s):'';$('#en').value=it.e!=null?fmt(it.e):'';$('#llrc').value=it.lrc||'';$('#loff').value=it.off||0;$('#songKey').value=ManokaraPitch.clamp(it.pitch);$('#lq').value=it.title;lyricEditor.load(it);$('#add').innerHTML=icon('check')+uiMarkup('<span>Save changes</span>');$('#ftitle').textContent=uiText('Edit song');$('#songTabLabel').textContent=uiText('Edit song');$('#cancel').hidden=false;$('#ftitle').scrollIntoView({block:'nearest'})}
  else{const editing=edit>=0?items[edit]:null,c=ci,k0=c?items.indexOf(c):-1,w=k0>=0?k0:pos;if(a==='del')items.splice(i,1);else{const j=a==='up'?i-1:i+1;if(j>=0&&j<items.length)[items[i],items[j]]=[items[j],items[i]]}
   if(editing){const newEdit=items.indexOf(editing);if(newEdit<0)reset();else edit=newEdit}if(c){const k=items.indexOf(c);if(k>=0)pos=k;else{if(k0>=0){pos=w;msg('Removed from the setlist. The current song keeps playing until it ends or you press Stop.')}else if(a==='del'&&i<pos)pos--}}save();render()}};
-function reset(){searchState='';edit=-1;pickDur=undefined;generatedTitle='';['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');lyricEditor.reset();$('#loff').value=0;$('#add').innerHTML=icon('plus')+uiMarkup('<span>Add to setlist</span>');$('#ftitle').textContent=uiText('Add a song');$('#songTabLabel').textContent=uiText('Song editor');$('#cancel').hidden=true;$('#lres').innerHTML=''}
+function reset(){searchState='';edit=-1;pickDur=undefined;generatedTitle='';['url','ttl','st','en','llrc','lq'].forEach(k=>$('#'+k).value='');lyricEditor.reset();$('#loff').value=0;$('#songKey').value=0;$('#add').innerHTML=icon('plus')+uiMarkup('<span>Add to setlist</span>');$('#ftitle').textContent=uiText('Add a song');$('#songTabLabel').textContent=uiText('Song editor');$('#cancel').hidden=true;$('#lres').innerHTML=''}
 $('#cancel').onclick=reset;
 $('#add').onclick=()=>{const u=$('#url').value.trim();if(!/^https?:\/\//.test(u)){msg('Paste a karaoke URL first.');return}
  const start=tp($('#st').value),end=tp($('#en').value);if(Number.isNaN(start)||Number.isNaN(end)||end!=null&&end<=(start||0)){msg('Use valid times (mm:ss or seconds); End must be after Start.');return}if(new TextEncoder().encode(JSON.stringify($('#llrc').value)).length>230000){msg('Lyrics are too long for the relay (maximum 230 KB).');return}
  let lyricDraft;try{lyricDraft=lyricEditor.read()}catch(error){msg(error.message);return}
- const it={title:($('#ttl').value.trim()||u).slice(0,512),url:u,s:start||0,e:end,lrc:$('#llrc').value,...lyricDraft,ldur:pickDur??(edit>=0?items[edit].ldur:undefined),off:+$('#loff').value||0};
+ const it={title:($('#ttl').value.trim()||u).slice(0,512),url:u,s:start||0,e:end,lrc:$('#llrc').value,...lyricDraft,ldur:pickDur??(edit>=0?items[edit].ldur:undefined),off:+$('#loff').value||0,pitch:ManokaraPitch.clamp($('#songKey').value)};
  const lyricBytes=new TextEncoder().encode(JSON.stringify({lrc:ManokaraLyrics.displayLrc(it),romajiLrc:ManokaraLyrics.secondaryLrc(it)})).length;if(lyricBytes>230000){msg('Combined output lyrics exceed 230 KB. Shorten the LRC or choose a single display language.');return}
- let savedItem=it;if(edit>=0){const existing=items[edit],reloadCurrent=existing===ci&&(existing.url!==it.url||existing.s!==it.s||existing.e!==it.e);Object.assign(existing,it);savedItem=existing;delete existing._L;if(existing===ci){dur=it.e!=null?it.e-it.s:null;timelineVersion++;$('#now').textContent=it.title;if(reloadCurrent)go(edit)}}else items.push(it);reset();const persisted=save();render();msg(persisted?'Saved.':'Browser storage is full or unavailable. Changes remain in this window only.');fetchSongTitle(savedItem)};
+ let savedItem=it;if(edit>=0){const existing=items[edit],pitchChanged=existing.pitch!==it.pitch,reloadCurrent=existing===ci&&(existing.url!==it.url||existing.s!==it.s||existing.e!==it.e);Object.assign(existing,it);savedItem=existing;delete existing._L;if(existing===ci){dur=it.e!=null?it.e-it.s:null;timelineVersion++;$('#now').textContent=it.title;if(reloadCurrent||pitchChanged&&pitchBusy)go(edit);else if(pitchChanged){const newPitch=existing.pitch;existing.pitch=ManokaraPitch.clamp(pitch.key);changeKey(newPitch)}}}else items.push(it);reset();const persisted=save();render();msg(persisted?'Saved.':'Browser storage is full or unavailable. Changes remain in this window only.');fetchSongTitle(savedItem)};
 $('#addmc').onclick=()=>{const duration=tp($('#mcd').value);if(!Number.isFinite(duration)||duration<=0){msg('Enter a positive MC duration (mm:ss or seconds).');return}items.push({mc:1,memo:$('#mcm').value,dur:duration});$('#mcm').value=$('#mcd').value='';save();render()};
 $('#clr').onclick=()=>{if(confirm(uiText('Remove all songs?'))){items=[];pos=0;last=-1;reset();save();render();if(ci)msg('Setlist cleared. The current song keeps playing until it ends or you press Stop.')}};
 $('#url').onchange=async()=>{const u=$('#url').value.trim(),before=$('#ttl').value,query=$('#lq').value;if(!yid(u)||before.trim()&&before.trim()!==u&&before!==generatedTitle)return;
@@ -322,12 +366,6 @@ transposeDialog.addEventListener('keydown',e=>{
  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!transposeDialog.hidden){e.preventDefault();closeTranspose()}});
-async function launchTransposeWindow(target){const status=$('#transposeStatus');
- const edge=/Edg\//.test(navigator.userAgent),store=edge?'https://microsoftedge.microsoft.com/addons/detail/transpose-%E2%96%B2%E2%96%BC-pitch-%E2%96%B9-spee/nakcigkhphkecnebinpgpdpbjfjgilkl':'https://chromewebstore.google.com/detail/transpose-pitch-%E2%96%B8-speed-%E2%96%B8/ioimlbgefgadofblnajllknopjboejda';
- window.open(target==='install'?store:location.href,'_blank','noopener');transposeMessage=target==='install'?'Extension store opened. Install it in this browser.':'Manokara opened in this browser profile.';status.textContent=uiText(transposeMessage);
-}
-$('#transposeInstall').onclick=()=>launchTransposeWindow('install');
-$('#transposeOpen').onclick=()=>launchTransposeWindow('app');
 /* green-screen window */
 function showOff(){const it=ci,v=it&&!it.mc?Math.round((it.off||0)*10)/10:0;
  $('#offv').textContent=uiText('Sync: ')+(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(1)+' s'+(v>0?uiText(' (lyrics earlier)'):v<0?uiText(' (lyrics later)'):'');
@@ -338,15 +376,15 @@ $('#lz').onclick=()=>{const it=ci;if(!it||it.mc)return;it.off=0;timelineVersion+
 const FONTS=[[uiText('System default'),'system-ui,"Segoe UI","Yu Gothic",sans-serif'],['Arial','Arial,sans-serif'],['Georgia (serif)','Georgia,serif'],['Courier New','"Courier New",monospace'],['Impact','Impact,sans-serif'],['Comic Sans MS','"Comic Sans MS",cursive'],
  ['Roboto · online','Roboto','Roboto:wght@400;800'],['Montserrat · online','Montserrat','Montserrat:wght@400;800'],['Be Vietnam Pro · online','"Be Vietnam Pro"','Be+Vietnam+Pro:wght@400;800'],['Oswald · online','Oswald','Oswald:wght@400;700'],['Playfair Display · online','"Playfair Display"','Playfair+Display:wght@400;800'],['Pacifico · online','Pacifico','Pacifico'],['Lobster · online','Lobster','Lobster'],['Dancing Script · online','"Dancing Script"','Dancing+Script:wght@400;700'],['Noto Sans JP · online','"Noto Sans JP"','Noto+Sans+JP:wght@400;800']];
 $('#lfont').innerHTML=FONTS.map((f,i)=>'<option value="'+i+'">'+esc(f[0])+'</option>').join('');
-const SK='kpt_set',SF=['cdn','lfont','lfc','lsz','lcol','lfx','lshape','lbgmode','ltheme'];let S={};try{S=JSON.parse(localStorage.getItem(SK)||'{}')||{}}catch(e){}let themeSeed=Number(S.themeSeed)>>>0;
+const SK='kpt_set',SF=['cdn','lfont','lfc','lsz','lcol','lfx','lshape','lbgmode','ltheme','lclassiccolor'];let S={};try{S=JSON.parse(localStorage.getItem(SK)||'{}')||{}}catch(e){}let themeSeed=Number(S.themeSeed)>>>0;
 SF.forEach(k=>{if(S[k]!=null&&!(k==='lfx'&&!S.fxv)&&!(k==='ltheme'&&S[k]==='custom'))$('#'+k).value=S[k]});if(!S.fxv)$('#lfx').value='jizura';if(S.lbold!=null)$('#lbold').checked=S.lbold;$('#lcenter').checked=!!S.centerFree;
 SF.forEach(k=>{const el=$('#'+k);if(el.tagName==='SELECT'&&!el.value)el.selectedIndex=0});
 const saveSet=()=>{const o={};SF.forEach(k=>o[k]=$('#'+k).value);o.lbold=$('#lbold').checked;o.centerFree=$('#lcenter').checked;o.themeSeed=themeSeed;o.fxv=1;try{localStorage.setItem(SK,JSON.stringify(o))}catch(e){}};
-function syncFxInputs(){$('#lrandom').innerHTML=icon('shuffle')+uiText('Shuffle JIZURA style');const jizura=$('#lfx').value==='jizura';['lsz','lcol','lfont','lfc','lbold'].forEach(i=>$('#'+i).disabled=jizura);$('#lrandom').disabled=!jizura;$('#lrandom').title=jizura?uiText('Reroll the JIZURA lyric-motion style for the current song'):uiText('Select JIZURA to randomize its lyric-motion style')}
+function syncFxInputs(){const classic=$('#lfx').value==='karaoke-classic';$('#classicHint').hidden=!classic;$('#classicColorField').hidden=!classic;$('#lcol').closest('label').hidden=classic;$('#lrandom').innerHTML=icon('shuffle')+uiText('Shuffle JIZURA style');const jizura=$('#lfx').value==='jizura';['lsz','lcol','lfont','lfc','lbold'].forEach(i=>$('#'+i).disabled=jizura);$('#lrandom').disabled=!jizura;$('#lrandom').title=jizura?uiText('Reroll the JIZURA lyric-motion style for the current song'):uiText('Select JIZURA to randomize its lyric-motion style')}
 $('#lrandom').onclick=()=>{if($('#lfx').value!=='jizura')return;const seed=new Uint32Array(1);try{crypto.getRandomValues(seed);themeSeed=seed[0]}catch(e){themeSeed=(Date.now()^Math.floor(Math.random()*0xffffffff))>>>0}saveSet();publishObsState();msg('JIZURA lyric-motion style randomized. Click again to reroll.')};
 function updateCenterPreview(){const p=$('#cfpreview');let shape=$('#lshape').value;if(shape==='auto')shape=innerHeight>innerWidth*1.1?'tall':'wide';p.dataset.shape=shape;p.style.opacity=$('#lcenter').checked?'1':'.42';$('#centerRow').title=$('#lcenter').checked?uiText('The dotted area stays clear for a character.'):uiText('Enable to keep the dotted centre area clear.');const effect=$('#lfx').value,hint=$('#centerHint');if(effect==='folia-monet')hint.textContent=uiText('Monet keeps its original lyric-rail and portrait composition; alternating placement is not applied.');else if(effect==='folia-pendolo')hint.textContent=uiText('Pendolo renders its clockwork layout as one scene, so Keep centre free is skipped.');else if(effect==='folia-claddagh')hint.textContent=uiText('Claddagh already arranges lyrics around an open centre; its circular layout is preserved.');else if(['folia-fume','folia-sonnet','folia-tempera','folia-lumiere','folia-diorama'].includes(effect))hint.textContent=uiText('This effect combines lyrics and motion in one full-frame scene, so Keep centre free is skipped to preserve the full-frame effect.');else hint.textContent=uiText('Lyrics alternate around the open centre; the Folia background and full-frame effects stay in place.')}
 updateCenterPreview();
-['lsz','lcol','lfont','lfc','lbold','cdn','lfx','lcenter','lshape','lbgmode','ltheme'].forEach(i=>['input','change'].forEach(ev=>$('#'+i).addEventListener(ev,()=>{saveSet();if(i==='lfx')syncFxInputs();if(['lcenter','lshape','lfx'].includes(i))updateCenterPreview();publishObsState()})));
+['lsz','lcol','lfont','lfc','lbold','cdn','lfx','lcenter','lshape','lbgmode','ltheme','lclassiccolor'].forEach(i=>['input','change'].forEach(ev=>$('#'+i).addEventListener(ev,()=>{if(i==='lclassiccolor')$('#ltheme').value='effect';saveSet();if(i==='lfx')syncFxInputs();if(['lcenter','lshape','lfx'].includes(i))updateCenterPreview();publishObsState()})));
 window.addEventListener('resize',updateCenterPreview);
 syncFxInputs();
 $('#lwin').onclick=()=>{if(!relayInitialized){msg('Wait for the lyric relay to connect.');return}const opened=window.open(window.ManokaraSession.obsUrl(true),'kpt-lyrics','width=1280,height=720');if(!opened)msg('Popup blocked. Please allow popups.');else msg('Green-screen window opened. It shares the OBS effect output.');};
@@ -383,8 +421,8 @@ function makeObsSnapshot(){
  const fontDef=FONTS[+$('#lfont').value]||FONTS[0],effect=$('#lfx').value;
  const googleFont=effect==='jizura'?'':(custom||fontDef[2]||'');
  const playing=mediaPlaying();
- const rawTime=!counting&&it&&!it.mc?elapsed():0,time=rawTime+(it&&!it.mc&&!counting?(it.off||0):0);
- const snapshot={writerId:relayPageId,ready:true,title:it&&!it.mc?it.title:'',lrc:it&&!it.mc?ManokaraLyrics.displayLrc(it):'',romajiLrc:it&&!it.mc?ManokaraLyrics.secondaryLrc(it):'',time,sampledAt:Date.now(),timelineVersion,playing,paused:!!paused,counting:!!counting,countdownRemaining:remaining,duration:it&&!it.mc?lyricDuration(it):0,mc:!!(it&&it.mc),memo:it&&it.mc?it.memo||'':'',size:+$('#lsz').value||64,foreground:$('#lcol').value,themeSeed,background:$('#lbgmode').value==='green'?'#00ff00':'transparent',transparent:$('#lbgmode').value!=='green',bold:$('#lbold').checked,font,googleFont,effect,centerFree:$('#lcenter').checked,centerShape:$('#lshape').value,colorTheme:$('#ltheme').value};
+ const rawTime=!counting&&it&&!it.mc?audibleElapsed():0,time=rawTime+(it&&!it.mc&&!counting?(it.off||0):0);
+ const snapshot={writerId:relayPageId,ready:true,title:it&&!it.mc?it.title:'',lrc:it&&!it.mc?ManokaraLyrics.displayLrc(it):'',romajiLrc:it&&!it.mc?ManokaraLyrics.secondaryLrc(it):'',time,sampledAt:Date.now(),timelineVersion,playing,paused:!!paused,counting:!!counting,countdownRemaining:remaining,duration:it&&!it.mc?lyricDuration(it):0,mc:!!(it&&it.mc),memo:it&&it.mc?it.memo||'':'',size:+$('#lsz').value||64,foreground:effect==='karaoke-classic'?$('#lclassiccolor').value:$('#lcol').value,themeSeed,background:$('#lbgmode').value==='green'?'#00ff00':'transparent',transparent:$('#lbgmode').value!=='green',bold:$('#lbold').checked,font,googleFont,effect,centerFree:$('#lcenter').checked,centerShape:$('#lshape').value,colorTheme:$('#ltheme').value};
  snapshot.overlay=window.ManokaraStudio.serialized;snapshot.playlist=playlistMetadata();snapshot.playlistTime=Math.max(0,rawTime);
  Object.assign(snapshot,playing?audioReaction.sample():{audioPower:0,audioBass:0,audioLowMid:0,audioMid:0,audioVocal:0,audioTreble:0});window.ManokaraStudio.feed(snapshot);return snapshot;
 }
@@ -414,18 +452,18 @@ $('#fm').onclick=()=>fsz(-2);$('#fp').onclick=()=>fsz(2);
 function updPan(){const it=ci;if(!it||it.mc||!it.lrc){if(pk!=='-'){P.innerHTML='<div class="lyrics-empty">'+icon('text-align-left')+'<span>'+(it&&!it.mc?uiMarkup('No lyrics for this song yet.<br>Find or import lyrics in the song editor.'):uiMarkup('Your words will find their place here.<br>Add lyrics to a song to follow along.'))+'</span></div>';$('#pinfo').textContent='';pk='-'}return}
  const L=getL(it),k=it._L.k;
  if(k!==pk){pk=k;panelActive=-2;P.scrollTop=0;P.innerHTML=it._L.all.map(q=>'<div class="ln">'+(q.x?esc(q.x):icon('music-notes'))+(q.romaji?'<span class="romanized">'+esc(q.romaji)+'</span>':'')+'</div>').join('');$('#pinfo').textContent=it._L.timed?'':uiText('Plain text: scrolling is approximate. Press T on each line to time it.')}
- const t=counting?-1:elapsed()+(it.off||0);let a=null;for(const q of L){if(q.t<=t)a=q;else break}
+ const t=counting?-1:audibleElapsed()+(it.off||0);let a=null;for(const q of L){if(q.t<=t)a=q;else break}
  const idx2=a?it._L.all.indexOf(a):-1;if(idx2===panelActive)return;panelActive=idx2;[...P.children].forEach((e,i)=>e.classList.toggle('cl',i===idx2));
  const e=P.children[idx2];if(e)P.scrollTop=e.offsetTop-P.clientHeight/2+e.clientHeight/2}
 setInterval(updPan,150);
 function tap(){const it=ci;if(!it||it.mc||!it.lrc){msg('Play a song with lyrics first.');return}
  const raw=it.lrc.split(/\r?\n/),i=raw.findIndex(l=>l.replace(/\[[^\]]*\]/g,'').trim()&&!/^\s*\[\d+:\d{2}/.test(l));if(i<0){msg('All lines already have times.');return}
- const t=Math.max(0,elapsed()+(it.off||0)),stamp='['+String(Math.floor(t/60)).padStart(2,'0')+':'+(t%60).toFixed(2).padStart(5,'0')+']';const romanized=ManokaraLyrics.validRomaji(it)?it.romaji.lrc.split(/\r?\n/):null;raw[i]=stamp+raw[i].trim();it.lrc=raw.join('\n');if(romanized){romanized[i]=stamp+romanized[i].trim();it.romaji={source:it.lrc,lrc:romanized.join('\n')}}timelineVersion++;save();msg('Timed line '+(i+1)+'.')}
+ const t=Math.max(0,audibleElapsed()+(it.off||0)),stamp='['+String(Math.floor(t/60)).padStart(2,'0')+':'+(t%60).toFixed(2).padStart(5,'0')+']';const romanized=ManokaraLyrics.validRomaji(it)?it.romaji.lrc.split(/\r?\n/):null;raw[i]=stamp+raw[i].trim();it.lrc=raw.join('\n');if(romanized){romanized[i]=stamp+romanized[i].trim();it.romaji={source:it.lrc,lrc:romanized.join('\n')}}timelineVersion++;save();msg('Timed line '+(i+1)+'.')}
 $('#tap').onclick=tap;
 document.addEventListener('keydown',e=>{if(ManokaraTour.active||!transposeDialog.hidden||/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey)return;if(e.key==='t'||e.key==='T')tap()});
 function refreshLanguage(){
  render();updatePlaybackState();setPauseUI(paused);syncFxInputs();updateCenterPreview();
- renderSearchResults();$('#transposeStatus').textContent=uiText(transposeMessage);
+ renderSearchResults();refreshPitch($('#pitchStatus').dataset.state);
  $('#ftitle').textContent=uiText(edit>=0?'Edit song':'Add a song');
  $('#songTabLabel').textContent=uiText(edit>=0?'Edit song':'Song editor');
  $('#add').innerHTML=icon(edit>=0?'check':'plus')+'<span>'+uiText(edit>=0?'Save changes':'Add to setlist')+'</span>';

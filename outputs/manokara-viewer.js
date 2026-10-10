@@ -10,13 +10,14 @@
   if(!playlist){frame=document.createElement('iframe');frame.id='lyricViewport';frame.title='Lyrics';frame.allow='autoplay';frame.src='./manokara-lyrics-view.html?room='+encodeURIComponent(room)+'#view='+encodeURIComponent(token);stage.append(frame)}
   const fresh=()=>state?{...state,time:clock.time(),sampledAt:Date.now(),stateAgeMs:0,countdownRemaining:clock.countdown()}:null;
   window.ManokaraOutput={room,time:()=>clock.time(),getSnapshot:fresh,audio:()=>state?.playing&&!state.paused&&clock.age()<1000?state:null,subscribe(fn){subscribers.add(fn);if(state)fn(fresh());return()=>subscribers.delete(fn)}};
-  function arrange(){ManokaraOverlay.fit(stage,document.documentElement,config);if(frame){ManokaraOverlay.geometry(frame,config.lyric);frame.hidden=!config.lyric.visible}}
+  function arrange(){ManokaraOverlay.fit(stage,document.documentElement,config);if(frame){const rect=ManokaraOverlay.lyricRect(config,state);ManokaraOverlay.geometry(frame,rect);frame.hidden=!rect.visible}}
   function accept(next,delay=0){
     state=next?.ready===false?null:clock.accept(next,performance.now(),delay);
     const transparent=kind==='playlist'||state?.transparent!==false;document.body.dataset.transparent=String(transparent);
     if(popup)document.body.style.backgroundColor=transparent?'transparent':state.background||'#00ff00';
     if(state)state.playlistTime=(next.playlistTime||0)+(state.time-(next.time||0));
-    const value=state?.overlay||'';if(value!==layoutKey){layoutKey=value;config=ManokaraOverlay.normalize(value);arrange()}
+    const value=state?.overlay||'';if(value!==layoutKey){layoutKey=value;config=ManokaraOverlay.normalize(value);if(playlist)arrange()}
+    if(frame)arrange();
     for(const fn of subscribers)fn(fresh()||{ready:false});
     if(playlist){let data={};try{data=JSON.parse(state?.playlist||'{}')}catch(_){}playlist.render(config,data);if(!state)playlist.root.hidden=true}
   }

@@ -1,9 +1,23 @@
 .fx-word{display:inline-block;white-space:pre}
+.classic-karaoke{position:fixed;inset:0;pointer-events:none;z-index:5;font-weight:inherit;text-shadow:none}
+.classic-karaoke[hidden],.classic-row[hidden]{display:none!important}
+body[data-karaoke="on"] #out{display:none}
+.classic-row{position:absolute;left:5%;width:90%;height:14%;top:64%;display:flex;align-items:center;justify-content:flex-start;text-align:left}
+.classic-row[data-row="1"]{top:82%;justify-content:flex-end;text-align:right}
+.classic-line{max-width:100%;line-height:1.25;overflow-wrap:anywhere}
+.classic-word{display:inline-block;position:relative;max-width:100%;vertical-align:baseline;white-space:pre-wrap}
+.classic-base,.classic-fill{paint-order:stroke fill;-webkit-text-stroke:.035em #17202c;text-shadow:.025em .035em .04em #0008}
+.classic-base{color:#fff}
+.classic-fill{position:absolute;inset:0;color:var(--classic-highlight,#2563eb);-webkit-text-stroke-color:#fff;clip-path:inset(0 100% 0 0);pointer-events:none}
+.classic-karaoke[data-center="on"][data-shape="wide"] .classic-row{left:2%;width:32%;top:30%;height:40%;justify-content:center;text-align:center}
+.classic-karaoke[data-center="on"][data-shape="wide"] .classic-row[data-row="1"]{left:auto;right:2%}
+.classic-karaoke[data-center="on"][data-shape="tall"] .classic-row{top:3%;height:25%;left:4%;width:92%;justify-content:center;text-align:center}
+.classic-karaoke[data-center="on"][data-shape="tall"] .classic-row[data-row="1"]{top:auto;bottom:3%}
 .fx-clean{animation:mk-fade-up .48s cubic-bezier(.2,.8,.2,1) both}
 .fx-word-pop .fx-word{animation:mk-word-pop .56s cubic-bezier(.18,.9,.28,1.2) both}
 .fx-neon .fx-word{animation:mk-neon .8s ease-out both}
 .fx-glitch .fx-word{animation:mk-glitch .44s steps(2,end) both}
-.fx-word,.fx-char{position:relative;will-change:transform,opacity,filter}
+.fx-word,.fx-char{display:inline-block;position:relative;will-change:transform,opacity,filter}
 .fx-tempera .fx-word{animation:mk-tempera .7s cubic-bezier(.2,.75,.25,1) both;text-shadow:0 .035em 0 #fff,0 .08em .12em #111}
 .fx-sonnet .fx-word{animation:mk-sonnet .95s cubic-bezier(.2,.8,.2,1) both;text-shadow:0 0 .12em currentColor}
 .fx-lumiere .fx-word{animation:mk-lumiere 1.15s cubic-bezier(.18,.65,.25,1) both;text-shadow:0 0 .18em currentColor,0 0 .42em currentColor}

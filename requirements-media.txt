@@ -1,0 +1,3 @@
+# Optional YouTube streaming/pitch dependencies; install into the server's virtualenv.
+# Includes the matching local EJS solver and Chrome impersonation support.
+yt-dlp[default,curl-cffi]==2026.8.19

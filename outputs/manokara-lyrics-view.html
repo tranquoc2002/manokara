@@ -14,6 +14,9 @@ body{background:transparent;color:#fff;font:800 64px/1.15 system-ui,"Yu Gothic",
 #previous{font-size:.55em;opacity:.55}
 #current{font-size:1em;overflow-wrap:anywhere;max-width:100%}#previous{max-width:100%;overflow-wrap:anywhere}.fx-word{max-width:100%;white-space:normal;overflow-wrap:anywhere}
 #count{font-size:1.5em;line-height:1}
+body[data-compact="on"] #out{padding:.65em}
+body[data-compact="on"] #previous:empty,body[data-compact="on"] #count:empty{display:none}
+body[data-compact="on"] #romajiCaption{position:static;width:100%;max-width:100%;flex:none}
 body[data-center-free="on"] #out{padding:0}
 body[data-center-free="on"][data-center-shape="wide"] #current,body[data-center-free="on"][data-center-shape="wide"] #previous{position:fixed;z-index:5;top:0;height:100vh;width:36vw;max-width:36vw;padding:2vw;display:block;align-content:center;text-align:center;overflow:hidden;overflow-wrap:anywhere}
 body[data-center-free="on"][data-center-shape="wide"] #current[data-zone="left"],body[data-center-free="on"][data-center-shape="wide"] #previous[data-zone="left"]{left:0;right:auto}
@@ -36,6 +39,7 @@ body[data-center-free="on"][data-center-shape="tall"] #romajiCaption[data-zone="
 </head>
 <body><main id="out"><div id="previous"></div><div id="current"></div><div id="count"></div></main><canvas id="jizuraCanvas"></canvas><iframe id="foliaFrame" title="Folia lyric visualizer" allow="autoplay"></iframe><div id="romajiCaption" hidden></div>
 <script src="./manokara-core.js"></script>
+<script src="./manokara-overlay.js"></script>
 <script src="./manokara-relay.js"></script>
 <script src="./manokara-effects.js?v=2"></script>
 <script src="./manokara-jizura.js?v=full"></script>
@@ -44,6 +48,7 @@ body[data-center-free="on"][data-center-shape="tall"] #romajiCaption[data-zone="
 const $=s=>document.querySelector(s);
 const jizuraCanvas=$('#jizuraCanvas');
 const foliaFrame=$('#foliaFrame');
+const classicKaraoke=ManokaraLyricFX.createClassic(document.body);
 const themes={white:{color:'#FFFFFF',filter:'grayscale(1) brightness(1.12)'},cyan:{color:'#67E8F9',filter:'sepia(1) saturate(3.4) hue-rotate(145deg)'},rose:{color:'#FDA4AF',filter:'sepia(1) saturate(3.2) hue-rotate(320deg)'},amber:{color:'#FCD34D',filter:'sepia(1) saturate(3.8) hue-rotate(350deg)'},violet:{color:'#C4B5FD',filter:'sepia(1) saturate(4) hue-rotate(230deg)'},mint:{color:'#6EE7B7',filter:'sepia(1) saturate(3.2) hue-rotate(105deg)'}};
 const relayRoom=new URL(location.href).searchParams.get('room')||'';
 const relayViewToken=new URLSearchParams(location.hash.slice(1)).get('view')||'';
@@ -79,7 +84,7 @@ function zoneFor(i,shape){return shape==='tall'?(i%2?'bottom':'top'):(i%2?'right
 function syncRomajiCaption(s,ls,shape,zone){
  const node=$('#romajiCaption'),text=ls.current&&ls.romaji!==ls.current?ls.romaji:'';
  if(!text){if(captionKey){node.hidden=true;captionKey=''}return}
- const key=[text,ls.index,s.size,s.centerFree,shape,innerWidth,innerHeight].join('|');if(key===captionKey)return;captionKey=key;
+ const key=[text,ls.index,s.size,s.centerFree,shape,zone,innerWidth,innerHeight].join('|');if(key===captionKey)return;captionKey=key;
  node.hidden=false;node.dataset.zone=zone;
  const width=s.centerFree&&shape==='wide'?innerWidth*.32:innerWidth*.88,height=s.centerFree&&shape==='tall'?innerHeight*.065:innerHeight*.14;
  const font=Math.max(9,Math.min((Number(s.size)||64)*.48,48,Math.sqrt(width*height/(Math.max(1,[...text].length)*.8))));
@@ -127,6 +132,8 @@ function render(){
  const s=state;
  if(!s){return}
  const effect=String(s.effect||'clean'),body=document.body;
+ const compact=ManokaraOverlay.compactLyrics(s);body.dataset.compact=compact?'on':'off';
+ const caption=$('#romajiCaption'),captionHost=compact?$('#out'):body;if(caption.parentElement!==captionHost)captionHost.append(caption);
  const shape=centerShape(s),ls=lineState(s),activeZone=zoneFor(ls.index,shape),centerOn=s.centerFree&&!s.counting&&!s.mc&&!!s.lrc;
  const nextSceneKey=[effect,shape,centerOn,s.colorTheme,s.transparent,s.background,s.foreground,s.font,s.bold,s.size,s.googleFont].join('|');
  if(nextSceneKey!==sceneKey){sceneKey=nextSceneKey;
@@ -137,7 +144,15 @@ function render(){
  syncFont(s);
  }
  if($('#current').dataset.zone!==activeZone){$('#current').dataset.zone=activeZone;$('#previous').dataset.zone=zoneFor(ls.index-1,shape)}
- syncRomajiCaption(s,ls,shape,activeZone);
+ const classicMode=effect==='karaoke-classic'&&!s.counting&&!s.mc&&!!s.title&&!!s.lrc;
+ body.dataset.karaoke=classicMode?'on':'off';
+ if(classicMode){
+  body.dataset.folia='off';body.dataset.jizura='off';jizuraCanvas.style.display='none';
+  const highlight=themes[s.colorTheme]?.color||(/^#[\da-f]{6}$/i.test(s.foreground||'')?s.foreground:'#2563eb');
+  const index=classicKaraoke.draw(s,lines,clock.time(),shape,highlight);
+  syncRomajiCaption(s,{...ls,index},shape,zoneFor(index,shape));return;
+ }
+ classicKaraoke.hide();syncRomajiCaption(s,ls,shape,activeZone);
  if(effect.startsWith('folia-')&&foliaFrame.dataset.mode!==effect){foliaFrame.dataset.mode=effect;foliaFrame.src='./manokara-folia.html?mode='+encodeURIComponent(effect)+(relayRoom?'&room='+encodeURIComponent(relayRoom):'')+(relayViewToken?'#view='+encodeURIComponent(relayViewToken):'');foliaLayoutKey=''}
  const foliaMode=effect.startsWith('folia-')&&!s.counting&&!s.mc&&!!s.title&&!!s.lrc;
  if(foliaMode){
@@ -165,6 +180,7 @@ function render(){
  if(textKey!==lastTextKey){currentNode.textContent=shown;window.ManokaraLyricFX.play(currentNode,shown,effect);lastTextKey=textKey}
 }
 function clearOutput(message=''){
+ classicKaraoke.hide();document.body.dataset.karaoke='off';document.body.dataset.compact='off';
  state=null;lastTextKey='';sceneKey='';foliaLayoutKey='';captionKey='';$('#romajiCaption').hidden=true;$('#romajiCaption').textContent='';document.body.dataset.centerFree='off';$('#current').className='';$('#current').textContent=message;
  $('#previous').textContent='';$('#count').textContent='';document.body.dataset.folia='off';document.body.dataset.jizura='off';jizuraCanvas.style.display='none';
  for(const fn of subscribers)fn({ready:false});

@@ -1,6 +1,10 @@
 /* Original Manokara overlays. OBS stays transparent outside each block. */
 .playlist-output{position:absolute;inset:0;pointer-events:none;color:#fff;font-family:system-ui,sans-serif;--playlist-accent:#b9dcc7;--playlist-surface:#15221db8;--playlist-radius:22px}
 .playlist-output[hidden],.playlist-block[hidden]{display:none!important}
+.playlist-group[hidden]{display:none!important}
+.playlist-group{position:absolute;transform-origin:top left;overflow:hidden;box-sizing:border-box;background:var(--playlist-surface);border:1px solid #ffffff30;border-radius:var(--playlist-radius);box-shadow:0 12px 36px #0002}
+.playlist-content[data-scroll="true"]{overflow:hidden;position:relative!important;display:block!important;width:100%!important}
+.playlist-content[data-scroll="true"] .playlist-list-track{will-change:transform}
 .playlist-block{position:absolute;box-sizing:border-box;container-type:inline-size;padding:28px;overflow:hidden;border:1px solid #ffffff26;border-radius:var(--playlist-radius);background:var(--playlist-surface);box-shadow:0 8px 32px #0002;line-height:1.3;isolation:isolate}
 .playlist-block h2{position:relative;z-index:1;font-family:inherit;font-size:.43em;font-weight:700;line-height:1.3;margin:0 0 22px;letter-spacing:.15em;text-transform:uppercase;color:var(--playlist-accent);padding:0}
 .playlist-content{position:relative;min-width:0;overflow-wrap:anywhere;word-break:normal}
@@ -121,3 +125,20 @@
  .playlist-output[data-theme="vinyl"] .playlist-art{position:relative;left:auto;top:auto;width:150px;height:150px;float:left;margin:0 20px 16px 0}
  .playlist-output[data-theme="vinyl"] [data-block="current"] .playlist-content::after{display:none}
 }
+/* One aligned panel, with compact artwork and a fixed heading above the queue. */
+.playlist-output[data-layout="unified"] .playlist-block{border:0;border-radius:0;background:transparent;box-shadow:none;padding:28px 32px}
+.playlist-output[data-layout="unified"] [data-block="list"],.playlist-output[data-layout="unified"] [data-block="next"]{border-top:1px solid color-mix(in srgb,currentColor 15%,transparent)}
+.playlist-output[data-layout="unified"] [data-block="next"]::before{display:none}
+.playlist-output[data-layout="unified"] [data-block="current"] h2{position:relative;left:auto;top:auto;margin:0 0 18px;padding:0;background:none;color:var(--playlist-accent);border-radius:0}
+.playlist-output[data-layout="unified"] [data-block="current"] .playlist-content{position:relative;padding:0}
+.playlist-output[data-layout="unified"] [data-block="current"] .playlist-art{position:relative;left:auto;top:auto;width:120px;height:120px;max-height:none;float:left;margin:0 24px 0 0}
+.playlist-output[data-layout="unified"] [data-block="current"] .playlist-content::after{display:none}
+.playlist-output[data-layout="unified"] [data-block="current"] .playlist-song-title{padding:0;white-space:normal;display:-webkit-box;-webkit-line-clamp:2}
+.playlist-output[data-layout="unified"] [data-block="current"] .playlist-progress{position:relative;left:auto;right:auto;bottom:auto;width:auto;margin:18px 0 0}
+.playlist-output[data-layout="unified"] .playlist-state{top:-36px;right:0;bottom:auto}
+.playlist-output[data-layout="unified"] .playlist-position{display:none}
+.playlist-output[data-layout="unified"] [data-block="next"] h2{display:block;width:auto;margin:0 0 12px;line-height:1.3;padding:0;border:0}
+.playlist-output[data-layout="unified"] [data-block="next"] .playlist-content{display:block;width:auto;position:relative}
+.playlist-output[data-layout="unified"] .playlist-next-number{right:0;bottom:0;font-size:1.8em}
+.playlist-output[data-layout="unified"][data-theme="paper"] .playlist-group{border-color:#57472e40;box-shadow:4px 5px 0 #29241d18}
+.playlist-output[data-layout="unified"][data-theme="minimal"] .playlist-group{border:0;border-left:2px solid var(--playlist-accent);box-shadow:none}
