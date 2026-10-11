@@ -407,11 +407,11 @@ function sendDirectSnapshot(){
 }
 window.addEventListener('pagehide',()=>directChannel?.close());
 setInterval(sendDirectSnapshot,100);
-function setRelayStatus(ok,owned=true){const el=$('#relayStatus');if(!el)return;
+function setRelayStatus(ok,owned=true,detail=''){const el=$('#relayStatus');if(!el)return;
  el.dataset.state=ok?(owned?'connected':'inactive'):'error';
  if(ok){el.textContent=owned?uiText('OBS relay connected'):uiText('OBS relay active · another window controls lyrics')}
  else if(location.protocol==='file:'){el.innerHTML=uiMarkup('OBS relay unavailable on file:// · <a href="http://localhost:8000/manokara.html">open server version</a>')}
- else if(location.protocol==='https:'){el.textContent=uiText('Lyric relay unavailable · check deployment')}
+ else if(location.protocol==='https:'){el.textContent=uiText('Lyric relay unavailable · check deployment')+(detail?' · '+String(uiText(String(detail))).replace(/[\r\n\x00-\x1f]/g,' ').slice(0,120):'')}
  else{el.textContent=uiText('OBS relay unavailable · start the server')}
 }
 function makeObsSnapshot(){
@@ -434,15 +434,15 @@ async function publishObsState(){
  const partial=relayScene&&Object.keys(snapshot).every(key=>relayDynamicFields.includes(key)||snapshot[key]===relayScene[key]);
  const packet=partial?Object.fromEntries(relayDynamicFields.map(key=>[key,snapshot[key]])):snapshot;
  const target=new URL(relayUrl('/__lyric-state'));if(partial)target.searchParams.set('patch','1');
- const r=await window.ManokaraSession.api(target,packet);if(r.status===428){relayScene=null;return}if(r.status===409){if(relayUp!=='inactive')setRelayStatus(true,false);relayUp='inactive';return}if(!r.ok)throw Error('relay unavailable');await r.json();relayScene=snapshot;uploadLatency.record(performance.now()-started);if(relayUp!==true)setRelayStatus(true);relayUp=true
+ const r=await window.ManokaraSession.api(target,packet);if(r.status===428){relayScene=null;return}if(r.status===409){if(relayUp!=='inactive')setRelayStatus(true,false);relayUp='inactive';return}if(!r.ok){const failure=await r.json().catch(()=>({}));throw Error(failure.error||'Relay returned HTTP '+r.status+'.')}await r.json();relayScene=snapshot;uploadLatency.record(performance.now()-started);if(relayUp!==true)setRelayStatus(true);relayUp=true
  }
- catch(e){if(relayUp!==false)setRelayStatus(false);relayUp=false}
+ catch(e){if(relayUp!==false)setRelayStatus(false,true,e.message||'Network request failed.');relayUp=false}
  finally{publishPending=false}
 }
 $('#copyobs').onclick=async()=>{try{await navigator.clipboard.writeText($('#obsurl').value);msg('OBS URL copied.')}catch(e){$('#obsurl').select();msg('Select and copy the OBS URL.')}};
 $('#rotateobs').onclick=async()=>{try{await window.ManokaraSession.rotate();$('#obsurl').value=window.ManokaraSession.obsUrl(false);window.ManokaraStudio.refresh();msg('Previous OBS links revoked. Update both lyrics and playlist Browser Sources with their new URLs.')}catch(e){msg(e.message)}};
 setInterval(publishObsState,200);
-relayReady.then(()=>publishObsState()).catch(e=>{setRelayStatus(false);msg(e.message)});
+relayReady.then(()=>publishObsState()).catch(e=>{setRelayStatus(false,true,e.message);msg(e.message)});
 setInterval(()=>{if(relayUp===true)relayServerAction('renew')},5000);
 var pickDur;
 /* right-hand lyrics panel */

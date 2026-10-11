@@ -29,9 +29,9 @@ from manokara_overlay import overlay_config, playlist_data
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 393_216
-MAX_ROOMS = 128
 MAX_ROOMS_PER_BROWSER = 8
 MAX_SESSIONS = 1024
+MAX_ROOMS = MAX_ROOMS_PER_BROWSER * MAX_SESSIONS
 SESSION_SECONDS = 30 * 86400
 WRITER_SECONDS = 15
 ROOM_ID = re.compile(r"^[a-f0-9]{32}$")
