@@ -95,6 +95,40 @@ Open `https://mano.del4yowo.id.vn`, select **OBS output**, and copy the OBS URL 
 
 Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocket Loader, which can break the script hashes in the content security policy. Leave HTML and relay responses uncached. Any tunnel access rules must let visitors load the public app and let OBS load its page, assets, and `/__lyric-state` without an interactive login.
 
+## Cloudflare Managed Challenge with OBS excluded
+
+Challenge the controller entry pages on `mano.del4yowo.id.vn`. In your domain's **Security > Security rules**, choose **Create rule > Custom rules**, name it `Manokara entry challenge`, and select **Edit expression**. Paste:
+
+```text
+(http.host eq "mano.del4yowo.id.vn"
+ and http.request.uri.path in {"/" "/manokara.html"})
+```
+
+Set **Then take action** to **Managed Challenge**, then **Deploy**. Change the hostname if you use another domain. See Cloudflare's [custom rule setup](https://developers.cloudflare.com/waf/custom-rules/create-dashboard/) and [expression operators](https://developers.cloudflare.com/ruleset-engine/rules-language/operators/).
+
+The path condition also matches controller links with query parameters, such as `/manokara.html?room=...`. It leaves these requests outside this rule:
+
+| Traffic | Paths |
+| --- | --- |
+| OBS lyric and playlist pages | `/manokara-obs.html`, `/manokara-playlist.html` |
+| Embedded lyric renderers | `/manokara-lyrics-view.html`, `/manokara-folia.html` |
+| Live state, polling and latency probes | `/__lyric-state` (including `?room=...&stream=1`), `/healthz` |
+| Static assets and app APIs | JavaScript, CSS, fonts, effect assets and the other `/__*` endpoints |
+
+OBS uses its existing read-only viewer token; excluding a URL from this challenge does not grant room access. Do not use the presence of `room=` as an exemption, because controller URLs also contain it. The `#view=...` fragment is not sent to Cloudflare and cannot be used in a request rule.
+
+This rule gates the main pages, not direct API requests. The backend's authentication, rate limits and resource limits continue to protect those endpoints. Managed Challenge reduces automated visits but does not guarantee blocking every bot or crawler. For stronger API verification, Cloudflare documents [Turnstile pre-clearance](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/); that would require a separate app integration. A challenge returns HTML and can break JSON requests, video streams and live lyrics if applied to those endpoints.
+
+Other Cloudflare protections still apply independently. Narrow any existing hostname-wide challenge rules or Under Attack Mode configuration that also affects OBS. If **Bot Fight Mode** challenges OBS, it cannot be exempted with a WAF Skip rule; disable that feature or use a protection that supports scoped exceptions. See Cloudflare's [Bot Fight Mode limitations](https://developers.cloudflare.com/bots/get-started/bot-fight-mode/#limitations). A blanket Skip rule for OBS is not required for the entry-page rule above.
+
+After deploying the rule:
+
+1. Open the main site in a fresh private browser window. Cloudflare may verify a human visitor automatically or ask for interaction; every visit will not necessarily show a checkbox.
+2. Load both copied OBS source URLs in OBS without browser cookies. Confirm lyrics, Folia effects and the playlist update during playback.
+3. If OBS or an API receives HTML, inspect **Security Events** for the responsible rule. Cloudflare marks challenge responses with [`cf-mitigated: challenge`](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/). Normal relay responses should be JSON or `text/event-stream`.
+
+Configure this rule in Cloudflare; no start-script change, frontend rebuild or Python restart is needed for the rule itself.
+
 ## Runtime behavior
 
 ### Backend package and upgrades
