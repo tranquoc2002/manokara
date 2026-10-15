@@ -9,7 +9,7 @@ import { createTabAudio } from './services/tab-audio.js';
 import { persistence } from './services/persistence.mjs';
 import { LYRIC_STYLE_FIELDS, normalizeLyricStyle as normalizePersistedStyle } from './domain/lyric-appearance.mjs';
 import { createRelayPacket } from './domain/relay-packet.mjs';
-import { LYRIC_PROVIDERS, LYRIC_SOURCE_STATUSES, readProviderCatalog, readLyricResults, readLyricSources, safeLyricSourceUrl } from './services/lyric-search.mjs';
+import { LYRIC_PROVIDERS, LYRIC_SOURCE_STATUSES, readProviderCatalog, readLyricResults, readLyricSources, safeLyricSourceUrl, ttmlImportNotice } from './services/lyric-search.mjs';
 export function initManokaraController() {
   if (window.ManokaraController?.active) return window.ManokaraController;
   const uiText = ManokaraI18n.text,
@@ -181,14 +181,28 @@ export function initManokaraController() {
   };
   const lyricEditor = ManokaraLyricsEditor.create({
     draft,
-    imported(metadata) {
-      draft.patch({ lyricSourceLabel: '', lyricSourceUrl: '', lyricCopyright: '', lyricSources: '[]' });
+    imported(metadata, _filename, ttml) {
+      draft.patch({ lyricSourceLabel: '', lyricSourceUrl: '', lyricCopyright: '', lyricSources: '[]', lyricLoadStatus: '' });
+      if (ttml) {
+        draft.patch({ lyricSourceLabel: 'TTML file', lyricCopyright: ttml.copyright || '', lyricLoadStatus: ttmlImportNotice(ttml.warnings, uiText) });
+      }
       pickDur = metadata.duration;
       if (!draft.get("ttl") && metadata.title) draft.set("ttl", metadata.title.slice(0, 512));
       if (!draft.get("lq")) draft.set("lq", [metadata.title, metadata.artist].filter(Boolean).join(' '));
     },
     changed() {
       pickDur = undefined;
+    },
+    async convertTtml(source, signal) {
+      await relayReady;
+      if (runtime.disposed || signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+      const response = await window.ManokaraSession.api(relayUrl('/__lyrics/import-ttml'), { ttml: source }, {
+        signal: AbortSignal.any([runtime.signal, signal, AbortSignal.timeout(15000)])
+      });
+      if (response.status === 404) throw Error('Restart the updated server to import TTML files.');
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || 'Could not import TTML.');
+      return data;
     }
   });
   runtime.own(() => lyricEditor.dispose());
@@ -714,7 +728,7 @@ export function initManokaraController() {
     draft.set('lyricLoadStatus', '');
   }
   async function saveSong() {
-    if (runtime.disposed || draft.get('saving')) return;
+    if (runtime.disposed || draft.get('saving') || draft.get('importBusy')) return;
     const u = draft.get("url").trim();
     if (!/^https?:\/\//.test(u)) {
       msg('Paste a karaoke URL first.');
@@ -843,7 +857,7 @@ export function initManokaraController() {
   function renderSearchResults() {
     const results = searchState === 'results' ? res.map(x => ({
       title: (x.trackName + ' — ' + x.artistName).slice(0, 700),
-      kind: uiText(x.syncedLyrics ? 'Timed lyrics' : 'Plain lyrics'),
+      kind: uiText(x.wordTimed ? 'Word-timed lyrics' : x.syncedLyrics ? 'Timed lyrics' : 'Plain lyrics') + (x.format === 'ttml' ? ' · TTML' : ''),
       timed: !!x.syncedLyrics,
       sources: x.sources.map(source => ({ label: source.label, url: safeLyricSourceUrl(source.url) })),
       duration: x.duration ? fmt(x.duration) : '—'
@@ -936,7 +950,7 @@ export function initManokaraController() {
     lyricEditor.sourceReplaced();
     pickDur = x.duration;
     const timed = !!x.syncedLyrics;
-    draft.set("lyricLoadStatus", uiText(timed ? 'Timed lyrics loaded. Save the song to keep them.' : 'Plain lyrics loaded. Save the song to keep them.'));
+    draft.set("lyricLoadStatus", [uiText(timed ? 'Timed lyrics loaded. Save the song to keep them.' : 'Plain lyrics loaded. Save the song to keep them.'), ttmlImportNotice(x.warnings, uiText)].filter(Boolean).join(' '));
     searchState = '';
     res = [];
     renderSearchResults();

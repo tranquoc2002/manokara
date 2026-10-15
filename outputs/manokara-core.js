@@ -11,23 +11,33 @@
       const stamps = [...line.matchAll(/\[(\d+):(\d{2}(?:\.\d+)?)\]/g)];
       const x = line.replace(/\[[^\]]*\]|<[^>]*>/g, '').trim();
       const wordTags = [...line.matchAll(/<(\d+):(\d{2}(?:[.:]\d+)?)>/g)];
+      // TTML imports retain ends as immutable LRC metadata. Legacy LRC remains unchanged.
+      const endTag = line.match(/\[mk-end:(\d+):(\d{2}(?:\.\d+)?)\]/);
+      const lineEnd = endTag ? Number(endTag[1]) * 60 + Number(endTag[2]) : null;
+      const endsTag = line.match(/\[mk-ends:([\d.,]+)\]/);
+      const wordEnds = endsTag ? endsTag[1].split(',').map(Number) : [];
       if (stamps.length) {
         timed = true;
         const firstTime = Number(stamps[0][1]) * 60 + Number(stamps[0][2]);
         for (const m of stamps) {
           const t = Number(m[1]) * 60 + Number(m[2]);
           const entry = { t, x };
-          if (wordTags.length) entry.words = wordTags.map((tag, i) => ({
-            t: Number(tag[1]) * 60 + Number(tag[2].replace(':', '.')) + t - firstTime,
-            x: line.slice(tag.index + tag[0].length, wordTags[i + 1]?.index).replace(/\[[^\]]*\]/g, ''),
-          }));
+          const delta = t - firstTime;
+          if (lineEnd !== null && Number.isFinite(lineEnd) && lineEnd >= firstTime) entry.end = lineEnd + delta;
+          if (wordTags.length) entry.words = wordTags.map((tag, i) => {
+            const start = Number(tag[1]) * 60 + Number(tag[2].replace(':', '.')) + delta;
+            const word = { t: start, x: line.slice(tag.index + tag[0].length, wordTags[i + 1]?.index).replace(/\[[^\]]*\]/g, '') };
+            const end = wordEnds[i] + delta;
+            if (wordEnds.length === wordTags.length && Number.isFinite(end) && end >= start && (entry.end == null || end <= entry.end + .001)) word.end = end;
+            return word;
+          });
           all.push(entry);
         }
       } else if (x) all.push({ t: null, x });
     }
     const span = Math.max(1, Number(duration) || 180);
     if (!timed) all.forEach((line, i) => { line.t = i * span / all.length; });
-    else all.forEach(line => { if (line.t !== null) line.t += offset; line.words?.forEach(word => word.t += offset); });
+    else all.forEach(line => { if (line.t !== null) line.t += offset; if (line.end != null) line.end += offset; line.words?.forEach(word => { word.t += offset; if (word.end != null) word.end += offset; }); });
     return { all, timed, lines: all.filter(line => line.t !== null).sort((a, b) => a.t - b.t) };
   }
 
@@ -37,14 +47,14 @@
     let isWordByWord = false;
     const lines = parsed.map((line, index) => {
       const startTime = Math.max(0, line.t);
-      const endTime = Math.max(startTime + .01, parsed[index + 1]?.t ?? (Number(duration) || 180));
+      const endTime = Math.max(startTime + .01, line.end ?? parsed[index + 1]?.t ?? (Number(duration) || 180));
       let words;
       if (line.words?.length && line.words.map(word => word.x).join('').trim() === line.x) {
         isWordByWord = true;
         words = line.words.filter(word => word.x).map(word => {
           const next = line.words[line.words.indexOf(word) + 1];
           const start = Math.max(startTime, Math.min(endTime, word.t));
-          return {text:word.x, startTime:start, endTime:Math.max(start, Math.min(endTime, next?.t ?? endTime))};
+          return {text:word.x, startTime:start, endTime:Math.max(start, Math.min(endTime, word.end ?? next?.t ?? endTime))};
         });
       } else {
         const tokens = line.x.match(/\s+|[^\s]+/gu) || [];

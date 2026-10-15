@@ -97,9 +97,17 @@ Run `node --test tests/test_playback.cjs` for deterministic lifecycle/clock/play
 
 ### Finding timed lyrics
 
-Song Editor → **Find lyrics** searches **All sources** by default, or one provider from the source selector. LRCLIB and NetEase are supported; Musixmatch is available when the server has an authorized subtitle API key. **Results with real LRC timestamps always come first, independent of provider.** Title/artist similarity and known media duration rank results within that group. Identical LRCs can share source links; different timing maps remain separate choices. Selecting a result closes the list and preserves the original timestamps. Its source is saved with the song in the setlist and My songs. More providers improve coverage; they do not automatically align a different instrumental recording.
+Song Editor → **Find lyrics** searches **All sources** by default, or one provider from the source selector. LRCLIB, NetEase and AMLL TTML are supported; Musixmatch is available when the server has an authorized subtitle API key. **Results with real timestamps always come first, independent of provider.** Title/artist similarity and known media duration rank results within that group. Identical lyric timelines can share source links; different timing maps remain separate choices. Selecting a result closes the list and preserves the original timestamps. Its source is saved with the song in the setlist and My songs. More providers improve coverage; they do not automatically align a different instrumental recording.
 
 Source failures, verification requirements and rate limits are displayed without discarding successful results from other providers. NetEase can require verification; Musixmatch remains visibly disabled without server configuration. **Lyricsify stays a separate button** for external lookup and local LRC import. See [provider deployment settings](DEPLOY.md#lyric-providers), including provider usage conditions and the required backend restart.
+
+#### AMLL TTML and word timing
+
+[AMLL TTML DB](https://github.com/amll-dev/amll-ttml-db) supplies community-authored TTML. Manokara searches its public metadata index independently of NetEase, then fetches up to four matching lyric files. Results identify **Word-timed lyrics · TTML** when every main line has word timing. Source and timing-author credits are retained with the saved song.
+
+**Import LRC / TTML** also accepts a local `.ttml` file (maximum 500 KB), including file drops. TTML conversion uses the authenticated backend, so restart Python after updating. This supports AMLL's absolute timestamps, not every TTML subtitle profile. The app imports main lyrics; supplied translations, romanization, backing vocals and XML styling are omitted, with a notice when relevant. Overlapping lines retain their times, but single-active-line views may display only one part. Create Romaji after importing if needed.
+
+TTML becomes Enhanced LRC with word starts plus protected `[mk-end:MM:SS.mmm]` line ends and `[mk-ends:seconds,...]` word ends. Classic karaoke and Folia consume these ends, preserving pauses between words; simpler styles use line timing. Blank cues clear instrumental gaps. These tags survive saving, Romaji conversion and the existing window/OBS relay without a database change. Keep timing tags intact when editing. A TTML source still needs to match the recording you sing to; it does not automatically compensate for a different intro or arrangement.
 
 ### React feature state
 
@@ -219,7 +227,7 @@ For a local environment without yt-dlp, install it with `.venv\Scripts\python.ex
 ### Find and import lyrics
 
 - **Find lyrics** combines enabled sources and returns lyrics directly in Manokara, always placing timed LRC before plain text. Choose **All sources** or an individual source; Musixmatch needs a server API key. See [Finding timed lyrics](#finding-timed-lyrics).
-- **Lyricsify ↗** opens a search using the song/artist field. Download the matching `.lrc` there and use **Import LRC**, drop it on the lyric editor, or paste the copied text. This is an external search fallback, not an automated scraper/API integration.
+- **Lyricsify ↗** opens a search using the song/artist field. Download the matching `.lrc` there and use **Import LRC / TTML**, drop it on the lyric editor, or paste the copied text. This is an external search fallback, not an automated scraper/API integration.
 - Imports retain the original LRC tags. Auto encoding handles UTF-8, BOM-marked UTF-16 and Shift_JIS; an encoding selector is available if needed. Title and duration metadata fill empty fields. Choose the recording/version that matches your karaoke audio and adjust Live sync if needed.
 
 ## Japanese / Romaji

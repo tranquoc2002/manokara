@@ -25,7 +25,8 @@ const defaults = Object.freeze({
   lyricsStatus: '',
   lyricsError: false,
   lyricLoadStatus: '',
-  saving: false
+  saving: false,
+  importBusy: false
 });
 const dataFields = new Set(['url', 'ttl', 'st', 'en', 'llrc', 'lq', 'lyricProvider', 'lyricSourceLabel', 'lyricSourceUrl', 'lyricCopyright', 'lyricSources', 'loff', 'songKey', 'saveToLibrary', 'romajiLrc', 'lyricMode', 'mcm', 'mcd']);
 export function createSongDraft() {

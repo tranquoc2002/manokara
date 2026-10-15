@@ -6,8 +6,9 @@ from ..schemas.lyrics import duration, match_score, text
 
 
 class ProviderError(Exception):
-    def __init__(self, status="unavailable"):
+    def __init__(self, status="unavailable", *, retry_at=None):
         self.status = status
+        self.retry_at = retry_at
         super().__init__(status)
 
 
@@ -61,13 +62,19 @@ def candidates(rows, query, mapper, limit=4):
 async def netease(get, query, track_duration):
     # The legacy /api/search/pc can reject anonymous queries with -462. The maintained
     # NeteaseCloudMusicApiEnhanced search module uses /api/search/get.
-    data = await get("https://music.163.com/api/search/get", {"s": query, "type": 1, "limit": 8, "offset": 0})
+    data = await get("https://music.163.com/api/search/get", {"s": query, "type": 1, "limit": 8, "offset": 0},
+                     cache=True, cache_ttl=60)
     if not isinstance(data, dict):
         raise ProviderError("invalid")
     if data.get("code") in (-462, 301, 302, 401, 403):
         raise ProviderError("restricted")
+    if data.get("code") == 429:
+        raise ProviderError("limited")
     if data.get("code") != 200:
         raise ProviderError()
+    result = data.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("songs"), list) and result.get("songCount") != 0:
+        raise ProviderError("invalid")
 
     def metadata(row):
         artists = row.get("artists") or row.get("ar") or []
@@ -77,15 +84,23 @@ async def netease(get, query, track_duration):
                 "artistName": ", ".join(str(artist.get("name", "")) for artist in artists if isinstance(artist, dict)),
                 "duration": seconds}
 
-    rows = candidates((data.get("result") or {}).get("songs") or [], query, metadata)
+    rows = candidates(result.get("songs") or [], query, metadata)
 
     async def lyric(row):
         if not re.fullmatch(r"\d{1,20}", str(row["id"])):
             raise ProviderError("invalid")
         body = await get("https://music.163.com/api/song/lyric", {"id": row["id"], "lv": -1, "kv": -1, "tv": -1}, cache=True)
-        if not isinstance(body, dict) or body.get("code", 200) != 200:
+        if not isinstance(body, dict):
+            raise ProviderError("invalid")
+        if body.get("code") in (-462, 301, 302, 401, 403):
             raise ProviderError("restricted")
+        if body.get("code") == 429:
+            raise ProviderError("limited")
+        if body.get("code", 200) != 200:
+            raise ProviderError()
         lrc = body.get("lrc") or {}
+        if not isinstance(lrc, dict):
+            raise ProviderError("invalid")
         return {**row, "syncedLyrics": lrc.get("lyric") if isinstance(lrc, dict) else None,
                 "sourceUrl": "https://music.163.com/#/song?id=" + str(row["id"])}
     return await expand(rows, lyric)

@@ -12,12 +12,13 @@ from starlette.exceptions import HTTPException
 
 from ..schemas.lyrics import PROVIDER_LABELS, normalize_result, rank_results
 from .lyric_providers import ADAPTERS, ProviderError
+from .amll import AmllProvider
 
 MAX_CACHE_BYTES = 8 * 1024 * 1024
 MAX_RESULT_BYTES = 1000000
 USER_AGENT = "Manokara/1.0 (+https://github.com/tranquoc2002/manokara)"
 HOSTS = {"lrclib": "lrclib.net", "netease": "music.163.com",
-         "musixmatch": "api.musixmatch.com"}
+         "amll": "raw.githubusercontent.com", "musixmatch": "api.musixmatch.com"}
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ class LyricsSettings:
         # Old private start scripts may still list the retired provider; ignore it on upgrade.
         providers = tuple(value for value in providers if value != "megalobiz")
         if any(value not in PROVIDER_LABELS for value in providers):
-            raise ValueError("MANOKARA_LYRIC_PROVIDERS accepts lrclib,netease,musixmatch.")
+            raise ValueError("MANOKARA_LYRIC_PROVIDERS accepts lrclib,netease,amll,musixmatch.")
         key = os.environ.get("MANOKARA_MUSIXMATCH_API_KEY", "").strip()
         if len(key) > 512 or any(ord(char) < 33 or ord(char) > 126 for char in key):
             raise ValueError("Lyric provider API keys must be printable ASCII without spaces.")
@@ -49,6 +50,7 @@ class LyricsService:
         self.cooldown = {}
         self.budgets = {}
         self.closed = False
+        self.amll = AmllProvider()
 
     def providers(self):
         return [{"id": provider, "label": label,
@@ -83,7 +85,8 @@ class LyricsService:
         now = time.monotonic()
         until, status = self.cooldown.get(provider, (0, "limited"))
         if until > now:
-            raise ProviderError(status)
+            # A local cooldown check must not extend the original upstream block.
+            raise ProviderError(status, retry_at=until)
         rate, burst = 4, 12
         tokens, updated = self.budgets.get(provider, (float(burst), now))
         tokens = min(burst, tokens + (now - updated) * rate)
@@ -91,17 +94,19 @@ class LyricsService:
         if tokens < 1:
             raise ProviderError("limited")
 
-    async def get(self, provider, url, params, *, cache=False):
+    async def get(self, provider, url, params, *, cache=False, cache_ttl=300, as_text=False, max_bytes=3 * 1024 * 1024):
         # All adapters have fixed, allowlisted targets. Upstream source links are display-only.
         parsed = urlsplit(url)
         if parsed.scheme != "https" or parsed.netloc != HOSTS[provider]:
+            raise ProviderError("invalid")
+        if provider == "amll" and not parsed.path.startswith("/amll-dev/amll-ttml-db/main/"):
             raise ProviderError("invalid")
         key = ("detail", provider, url, tuple(sorted(params.items())))
         previous = self.cached(key) if cache else None
         if previous is not None:
             return previous
         self.reserve(provider)
-        headers = {}
+        headers = {"Accept": "text/plain"} if as_text else {}
         params = dict(params)
         if provider == "netease":
             headers["Referer"] = "https://music.163.com/"
@@ -129,14 +134,25 @@ class LyricsService:
                 content = bytearray()
                 async for chunk in response.aiter_bytes():
                     content.extend(chunk)
-                    if len(content) > 3 * 1024 * 1024:
+                    if len(content) > max_bytes:
                         raise ProviderError("invalid")
         try:
-            value = json.loads(content)
+            value = content.decode("utf-8-sig") if as_text else json.loads(content)
         except (ValueError, RecursionError):
             raise ProviderError("invalid") from None
-        if cache:
-            self.remember(key, value, 300)
+        cacheable = True
+        if provider == "netease":
+            # NetEase can return verification/errors inside an HTTP 200 response.
+            # Never retain those responses as lyric or search details.
+            cacheable = isinstance(value, dict) and value.get("code") == 200
+            if cacheable and parsed.path == "/api/search/get":
+                result = value.get("result")
+                cacheable = isinstance(result, dict) and isinstance(result.get("songs"), list) and bool(result["songs"])
+            elif cacheable and parsed.path == "/api/song/lyric":
+                lrc = value.get("lrc")
+                cacheable = isinstance(lrc, dict) and isinstance(lrc.get("lyric"), str) and bool(lrc["lyric"].strip())
+        if cache and cacheable:
+            self.remember(key, value, cache_ttl)
         return value
 
     async def run_provider(self, provider, query, track_duration):
@@ -144,18 +160,29 @@ class LyricsService:
             async with asyncio.timeout(10):
                 async def get(url, params, **options):
                     return await self.get(provider, url, params, **options)
-                values, partial = await ADAPTERS[provider](get, query, track_duration)
+                search = self.amll.search if provider == "amll" else ADAPTERS[provider]
+                values, partial = await search(get, query, track_duration)
                 rows = [row for value in values if (row := normalize_result(provider, value))]
-                return rows, "partial" if partial else "ok" if rows else "empty"
+                status = "partial" if partial else "ok" if rows else "empty"
         except ProviderError as error:
-            if error.status in ("restricted", "credentials"):
+            if error.status in ("restricted", "credentials") and error.retry_at is None:
                 # Distinct queries must not repeatedly hammer a provider asking for verification.
                 self.cooldown[provider] = (time.monotonic() + 60, error.status)
-            return [], error.status
+            rows, status = [], error.status
         except (TimeoutError, httpx.TimeoutException):
-            return [], "timeout"
+            rows, status = [], "timeout"
         except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError, OverflowError, RecursionError):
-            return [], "unavailable"
+            rows, status = [], "unavailable"
+        if provider == "netease":
+            recent_key = ("recent-provider", provider, query.casefold(), track_duration)
+            if status in ("ok", "empty"):
+                # A successful empty response also invalidates a previous positive match.
+                self.remember(recent_key, rows, 300)
+            else:
+                recent = self.cached(recent_key)
+                if recent:
+                    rows, status = rank_results([*rows, *recent], query, track_duration), "stale"
+        return rows, status
 
     async def collect(self, query, provider, track_duration):
         enabled = [row["id"] for row in self.providers() if row["enabled"] and provider in ("auto", row["id"])]
@@ -210,6 +237,7 @@ class LyricsService:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await self.amll.close()
         if self.client is not None:
             await self.client.aclose()
         self.cache.clear()

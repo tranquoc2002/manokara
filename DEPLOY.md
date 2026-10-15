@@ -17,15 +17,15 @@ Use Python 3.12 or newer. The app is public and requires no password or account.
 
 ### Lyric providers
 
-After updating an existing installation, run `.venv/bin/python -m pip install -r requirements.txt` and restart Python. Multi-source search now runs through authenticated `/__lyrics/search` and `/__lyrics/providers` endpoints; the production requirements include HTTPX. No separate worker, Node process or lyric database is needed. Allow outbound HTTPS to `lrclib.net`, `music.163.com` and, when enabled, `api.musixmatch.com`.
+After updating an existing installation, run `.venv/bin/python -m pip install -r requirements.txt` and restart Python. Multi-source search runs through authenticated `/__lyrics/search` and `/__lyrics/providers` endpoints; TTML file import uses `/__lyrics/import-ttml`. The production requirements include HTTPX. No separate worker, Node process or lyric database is needed. Allow outbound HTTPS to `lrclib.net`, `music.163.com`, `raw.githubusercontent.com` and, when enabled, `api.musixmatch.com`.
 
-The default catalog is LRCLIB and NetEase, plus Musixmatch when its API key is configured. Searches run concurrently and rank actual timed LRC before plain text, then match title/artist and known media duration. There is no provider preference. Each adapter fetches a bounded candidate set, so the combined list is not an exhaustive catalog search. NetEase uses an undocumented endpoint without account cookies; verification or regional restrictions appear as a source warning. Other sources continue to return results.
+The default catalog is LRCLIB, NetEase and AMLL TTML, plus Musixmatch when its API key is configured. Searches run concurrently and rank actual timed lyrics before plain text, then match title/artist and known media duration. There is no provider preference. Each adapter fetches a bounded candidate set, so the combined list is not an exhaustive catalog search. NetEase uses an undocumented endpoint without account cookies; verification or regional restrictions appear as a source warning. Other sources continue to return results.
 
 Optional environment variables belong in your **private** start script or environment, never committed frontend code:
 
 ```sh
-# Restrict the enabled sources if needed (default: all three, with Musixmatch key-gated).
-export MANOKARA_LYRIC_PROVIDERS="lrclib,netease,musixmatch"
+# Restrict the enabled sources if needed (default: all four, with Musixmatch key-gated).
+export MANOKARA_LYRIC_PROVIDERS="lrclib,netease,amll,musixmatch"
 # Optional licensed Musixmatch API access, including track.subtitle.get permission.
 export MANOKARA_MUSIXMATCH_API_KEY="your-key"
 ```
@@ -33,6 +33,10 @@ export MANOKARA_MUSIXMATCH_API_KEY="your-key"
 Leave optional key variables unset when unused. Musixmatch stays disabled without its key; desktop/session token workarounds are not used. An enabled key can still lack subtitle rights, in which case the UI reports the access problem. Follow the provider's applicable display, territory, caching and OBS/broadcast licensing conditions; supplying a key does not grant additional usage rights.
 
 Manokara shows source links in search, the editor and live lyrics, and keeps source metadata with saved songs. A short RAM cache, bounded request budgets and upstream `Retry-After` cooldowns limit repeated calls. There is no catalog mirroring or lyric cache on disk. Each complete search has up to six concurrent jobs globally and a ten-second provider budget; identical in-flight searches share one job. Cached responses have a total 8 MiB/96-entry limit. Lyricsify retains its separate external search/import button.
+
+NetEase search candidates are cached for one minute and successful lyric details for five minutes. Verification/error payloads returned with HTTP 200 are not cached, and searching again during a cooldown does not extend its deadline. For the same query and duration, a source failure can reuse a successful result up to five minutes old, clearly labeled as recent results; this shares the existing bounded RAM cache. A successful empty response clears that fallback. This reduces disappearing results during brief outages, but does not guarantee upstream availability or bypass verification.
+
+AMLL needs no API key or NetEase session. Its public metadata index downloads lazily (maximum 8 MiB/20,000 records), is parsed into a separate RAM index and refreshes after one hour. Concurrent searches share that download; failed refreshes retain the prior index and report partial results. Only up to four matching TTML files are fetched per query (500 KB each). The first AMLL search can take longer while the index loads. If an existing private script sets `MANOKARA_LYRIC_PROVIDERS`, add `amll` there to enable it. Source links point to [AMLL TTML DB](https://github.com/amll-dev/amll-ttml-db); timing-author attribution is retained. Local TTML import remains available even if AMLL search is disabled. See [TTML support and timing limits](TECHNICAL.md#amll-ttml-and-word-timing).
 
 ### Build the frontend before deploying
 
@@ -208,7 +212,7 @@ For local HTTP development only, set `MANOKARA_ORIGIN=http://localhost:8000` and
 
 Deploy the entire `outputs/romaji-assets/` directory along with the new lyric editor/worker scripts. The Japanese dictionary and converter are prebuilt (approximately 18 MB); no translation service or new Python dependency is required. They load only when **Create Romaji** is clicked and are cacheable public assets. Restart the Python server after updating so its asset allowlist includes the new files, reload the controller, and Refresh the OBS Browser Source. A new controller sends a `romajiLrc` field, so the old server must be updated even for Original mode.
 
-To rebuild Romaji assets from pinned dependencies, run `npm ci --ignore-scripts` and `npm run build:romaji` from the repository root. This is a developer step; normal deployment uses the committed bundle and dictionary. **Lyricsify ↗** opens external search and **Import LRC** reads the downloaded file locally; the backend does not scrape Lyricsify.
+To rebuild Romaji assets from pinned dependencies, run `npm ci --ignore-scripts` and `npm run build:romaji` from the repository root. This is a developer step; normal deployment uses the committed bundle and dictionary. **Lyricsify ↗** opens external search and **Import LRC / TTML** reads downloaded LRC locally (TTML is converted by the authenticated backend); the backend does not scrape Lyricsify.
 
 ## Live OBS updates
 

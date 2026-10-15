@@ -42,9 +42,9 @@
    entries=[];byRaw=new Map();
    lines.forEach((line,rawIndex)=>{
     if(!line.x)return;
-    const end=Math.max(line.t+.01,lines[rawIndex+1]?.t??(duration>line.t?duration:line.t+5));
+    const end=Math.max(line.t+.01,line.end??lines[rawIndex+1]?.t??(duration>line.t?duration:line.t+5));
     const exact=line.words?.length&&line.words.map(word=>word.x).join('').trim()===line.x&&line.words.every((word,i)=>i===0||word.t>=line.words[i-1].t);
-    const spans=exact?line.words.map((word,i)=>({text:i===0?word.x.trimStart():i===line.words.length-1?word.x.trimEnd():word.x,start:Math.max(line.t,Math.min(end,word.t)),end:Math.max(line.t,Math.min(end,line.words[i+1]?.t??end))})):[{text:line.x,start:line.t,end}];
+    const spans=exact?line.words.map((word,i)=>({text:i===0?word.x.trimStart():i===line.words.length-1?word.x.trimEnd():word.x,start:Math.max(line.t,Math.min(end,word.t)),end:Math.max(line.t,Math.min(end,word.end??line.words[i+1]?.t??end))})):[{text:line.x,start:line.t,end}];
     const tokens=[];
     for(const span of spans){const chunks=parts(span.text),weights=chunks.map(text=>Math.max(.2,Array.from(text.normalize('NFC')).length*(/^\s+$/.test(text)?.35:1))),total=weights.reduce((a,b)=>a+b,0);let cursor=0;
      chunks.forEach((text,i)=>{const start=span.start+(span.end-span.start)*cursor/total;cursor+=weights[i];tokens.push({text,start,end:span.start+(span.end-span.start)*cursor/total})});

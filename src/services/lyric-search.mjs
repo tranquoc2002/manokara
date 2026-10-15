@@ -2,12 +2,14 @@
 export const LYRIC_PROVIDERS = Object.freeze([
   { id: 'lrclib', label: 'LRCLIB', enabled: true },
   { id: 'netease', label: 'NetEase', enabled: true },
+  { id: 'amll', label: 'AMLL TTML', enabled: true },
   { id: 'musixmatch', label: 'Musixmatch', enabled: false, reason: 'needs_key' }
 ]);
 // Preserve attribution on previously saved songs; retired sources cannot be searched.
 const legacySources = [{ id: 'megalobiz', label: 'Megalobiz' }];
 export const LYRIC_SOURCE_STATUSES = Object.freeze({
   ok: 'Found lyrics', empty: 'No lyrics found', partial: 'Some results could not be loaded',
+  stale: 'Showing recent results while the source is temporarily unavailable',
   timeout: 'Source took too long', limited: 'Source rate limit reached',
   restricted: 'Source requires verification', credentials: 'API access needs attention',
   unavailable: 'Source is temporarily unavailable', invalid: 'Source returned an unreadable response'
@@ -35,9 +37,18 @@ export function readLyricResults(value) {
 export function safeLyricSourceUrl(value) {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port === '443') &&
-      ['lrclib.net', 'music.163.com', 'megalobiz.com', 'www.megalobiz.com', 'musixmatch.com', 'www.musixmatch.com'].includes(url.hostname) ? url.href : '';
+    const allowed = ['lrclib.net', 'music.163.com', 'megalobiz.com', 'www.megalobiz.com', 'musixmatch.com', 'www.musixmatch.com'].includes(url.hostname) ||
+      url.hostname === 'github.com' && url.pathname.startsWith('/amll-dev/amll-ttml-db/');
+    return allowed && url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port === '443') ? url.href : '';
   } catch { return ''; }
+}
+export function ttmlImportNotice(warnings = [], translate = value => value) {
+  if (!Array.isArray(warnings)) return '';
+  const notes = [];
+  if (warnings.includes('auxiliary') || warnings.includes('background')) notes.push(translate('TTML imports main lyrics. Supplied translations, romanization and backing vocals are omitted; you can create Romaji after importing.'));
+  if (warnings.includes('overlap')) notes.push(translate('This TTML has overlapping lines. Their timing is kept, but views with one active line may show only one part.'));
+  if (warnings.includes('reserved_characters')) notes.push(translate('Literal brackets in TTML text use fullwidth characters to preserve the lyric timeline.'));
+  return notes.join(' ');
 }
 export function readLyricSources(value) {
   if (typeof value === 'string') {

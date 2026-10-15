@@ -1,8 +1,8 @@
-/* Lyricsify fallback, local LRC import and an editable, time-aligned Romaji draft. */
+/* Lyricsify fallback, LRC/TTML import and an editable, time-aligned Romaji draft. */
 (() => {
   'use strict';
   const L=ManokaraLyrics, $=s=>document.querySelector(s);
-  function create({imported=()=>{},changed=()=>{},draft=null}={}) {
+  function create({imported=()=>{},changed=()=>{},convertTtml=null,draft=null}={}) {
     // The React editor owns draft values; standalone legacy callers can keep DOM fields.
     const attributes={llrc:{value:'llrc'},romajiLrc:{value:'romajiLrc'},lyricMode:{value:'lyricMode'},
       ttl:{value:'ttl'},lq:{value:'lq'},lrcEncoding:{value:'lrcEncoding'},
@@ -17,7 +17,7 @@
     function listen(target,type,callback,options){target.addEventListener(type,callback,options);cleanup.push(()=>target.removeEventListener(type,callback,options))}
     function click(id,callback){const element=$(id),previous=element.onclick;element.onclick=callback;cleanup.push(()=>{if(element.onclick===callback)element.onclick=previous})}
     const source=field('#llrc'), preview=field('#romajiLrc'), selector=field('#lyricMode'), status=$('#lyricsStatus');
-    let draftSource='',epoch=0,worker=null,pending=null,fileEpoch=0;
+    let draftSource='',epoch=0,worker=null,pending=null,fileEpoch=0,fileController=null;
     let statusSource='';
     const setStatus=(text,error=false)=>{if(disposed)return;statusSource=text;const translated=globalThis.ManokaraI18n?.text(text)||text;
       if(draft)draft.patch({lyricsStatus:translated,lyricsError:error});else{status.textContent=translated;status.classList.toggle('error',error)}};
@@ -29,9 +29,13 @@
     }
     function clear() {
       epoch++;if(pending)stopWorker();draftSource='';preview.value='';selector.value='original';field('#romajiDetails').open=false;
-      availability();setStatus('Drop an LRC file here, or paste lyrics. Romaji keeps the original timing.');
+      availability();setStatus('Drop an LRC or TTML file here, or paste lyrics. Romaji keeps the original timing.');
     }
-    listen(source,'input',event=>{if(draft)draft.set('llrc',event.target.value);clear();changed()});
+    function cancelImport() {
+      fileEpoch++;fileController?.abort();fileController=null;
+      if(draft)draft.set('importBusy',false);
+    }
+    listen(source,'input',event=>{cancelImport();if(draft)draft.set('llrc',event.target.value);clear();changed()});
     listen(preview,'input',event=>{
       if(draft)draft.set('romajiLrc',event.target.value);
       const error=L.alignmentError(source.value,preview.value);availability();
@@ -40,6 +44,7 @@
     listen(selector,'change',event=>{if(draft)draft.set('lyricMode',event.target.value);availability();setStatus('Display mode applies when you Add/Save this song.')});
     function stopWorker() {if(pending)clearTimeout(pending.timer);if(worker)worker.terminate();worker=null;pending=null;field('#romanize').disabled=false}
     function generate() {
+      if(fileController){setStatus('Wait for the lyric import to finish.');return}
       const raw=source.value;
       if(!raw.trim()){setStatus('Paste or import Japanese lyrics first.',true);return}
       if(raw.length>200000){setStatus('Lyrics exceed the 200,000-character limit.',true);return}
@@ -92,9 +97,14 @@
     });
     async function importFile(file) {
       if(!file)return;
-      if(!/\.lrc$/i.test(file.name)){setStatus('Choose a .lrc file.',true);return}
-      if(file.size>512000){setStatus('LRC file is too large (maximum 500 KB).',true);return}
-      const current=++fileEpoch,importRevision=epoch,previous=source.value;
+      if(!/\.(lrc|ttml)$/i.test(file.name)){setStatus('Choose an .lrc or .ttml file.',true);return}
+      const isTtml=/\.ttml$/i.test(file.name);
+      if(file.size>(isTtml?500000:512000)){setStatus('Lyric file is too large (maximum 500 KB).',true);return}
+      cancelImport();if(pending)stopWorker();
+      const current=fileEpoch,importRevision=epoch,previous=source.value,controller=new AbortController();
+      fileController=controller;if(draft)draft.set('importBusy',true);
+      setStatus(isTtml?'Reading TTML…':'Reading LRC…');
+      const currentImport=()=>!disposed&&current===fileEpoch&&importRevision===epoch&&previous===source.value&&!controller.signal.aborted;
       try {
         const bytes=new Uint8Array(await file.arrayBuffer()), encoding=field('#lrcEncoding').value;
         let decoded,used=encoding;
@@ -104,12 +114,21 @@
           else try{decoded=new TextDecoder('utf-8',{fatal:true}).decode(bytes);used='UTF-8'}
           catch{decoded=new TextDecoder('shift_jis',{fatal:true}).decode(bytes);used='Shift_JIS'}
         } else decoded=new TextDecoder(encoding,{fatal:true}).decode(bytes);
-        if(decoded.length>200000||/\u0000/.test(decoded))throw Error('Invalid or oversized text. Check the file encoding.');
-        if(current!==fileEpoch||importRevision!==epoch||previous!==source.value)return;
+        if(decoded.length>(isTtml?500000:200000)||/\u0000/.test(decoded))throw Error('Invalid or oversized text. Check the file encoding.');
+        if(!currentImport())return;
+        let ttml=null;
+        if(isTtml){
+          if(!convertTtml)throw Error('Restart the updated server to import TTML files.');
+          ttml=await convertTtml(decoded,controller.signal);
+          if(!currentImport())return;
+          if(typeof ttml?.syncedLyrics!=='string'||ttml.syncedLyrics.length>200000)throw Error('Could not read this TTML file. Check its XML format.');
+          decoded=ttml.syncedLyrics;
+        }
         source.value=decoded;clear();
-        changed();const metadata=L.fileMetadata(decoded);imported(metadata,file.name);
-        setStatus(`Imported ${file.name} (${used}). Original timestamps and offset tags are retained.`);
-      } catch(error){if(current===fileEpoch)setStatus('Import failed: '+error.message,true)}
+        changed();const metadata=L.fileMetadata(decoded);imported(metadata,file.name,ttml);
+        setStatus(isTtml?'TTML imported. Review the lyrics, then Add/Save.':`Imported ${file.name} (${used}). Original timestamps and offset tags are retained.`);
+      } catch(error){if(currentImport())setStatus('Import failed: '+(error.name==='TimeoutError'?'TTML import took too long. Try again.':error.message),true)}
+      finally{if(current===fileEpoch){fileController=null;if(draft)draft.set('importBusy',false)}}
     }
     click('#importLrc',()=>$('#lrcFile').click());
     listen($('#lrcFile'),'change',event=>{const file=event.target.files[0];event.target.value='';importFile(file)});
@@ -120,20 +139,20 @@
     listen(zone,'dragleave',()=>{if(--dragDepth<=0){dragDepth=0;zone.classList.remove('dragging')}});
     listen(zone,'drop',event=>{
       if(!event.dataTransfer.files.length)return;event.preventDefault();dragDepth=0;zone.classList.remove('dragging');
-      if(event.dataTransfer.files.length!==1){setStatus('Import one LRC file at a time.',true);return}importFile(event.dataTransfer.files[0]);
+      if(event.dataTransfer.files.length!==1){setStatus('Import one lyric file at a time.',true);return}importFile(event.dataTransfer.files[0]);
     });
     clear();
     return {
-      reset(){fileEpoch++;clear()},
-      load(item){fileEpoch++;clear();if(L.validRomaji(item)){draftSource=source.value;preview.value=item.romaji.lrc;selector.value=L.mode(item);availability();field('#romajiDetails').open=selector.value!=='original';setStatus('Saved Romaji loaded. You can edit its text; keep the LRC tags unchanged.')}else if(item.romaji)setStatus('Saved Romaji no longer matches this LRC. Create Romaji again.',true)},
+      reset(){cancelImport();clear()},
+      load(item){cancelImport();clear();if(L.validRomaji(item)){draftSource=source.value;preview.value=item.romaji.lrc;selector.value=L.mode(item);availability();field('#romajiDetails').open=selector.value!=='original';setStatus('Saved Romaji loaded. You can edit its text; keep the LRC tags unchanged.')}else if(item.romaji)setStatus('Saved Romaji no longer matches this LRC. Create Romaji again.',true)},
       read(){
         const valid=availability();
         if(selector.value!=='original'&&!valid)throw Error(L.alignmentError(source.value,preview.value)||'Create Romaji again after changing the original lyrics.');
         return {lyricMode:selector.value,romaji:valid?{source:source.value,lrc:preview.value}:undefined};
       },
       // Search results replace the source, so a translation from the previous source is invalid.
-      sourceReplaced(){fileEpoch++;clear()},
-      dispose(){if(disposed)return;disposed=true;epoch++;fileEpoch++;stopWorker();cleanup.splice(0).reverse().forEach(remove=>remove());for(const [url,timer] of downloads){clearTimeout(timer);URL.revokeObjectURL(url)}downloads.clear()},
+      sourceReplaced(){cancelImport();clear()},
+      dispose(){if(disposed)return;cancelImport();disposed=true;epoch++;stopWorker();cleanup.splice(0).reverse().forEach(remove=>remove());for(const [url,timer] of downloads){clearTimeout(timer);URL.revokeObjectURL(url)}downloads.clear()},
     };
   }
   window.ManokaraLyricsEditor={create};

@@ -1,10 +1,13 @@
 """Same-origin, authenticated lyric searches; provider credentials never reach the browser."""
+import asyncio
+
 from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from ..http import read_json
 from ..schemas.lyrics import PROVIDER_LABELS, duration
+from ..schemas.ttml import convert_ttml, TtmlError
 
 
 def build_routes(runtime):
@@ -39,5 +42,20 @@ def build_routes(runtime):
         authenticate(request)
         return JSONResponse(result)
 
+    async def import_ttml(request):
+        digest = authenticate(request)
+        runtime.limiter.check(("ttml-import", digest), 12 / 60, 4)
+        runtime.limiter.check("ttml-import-global", 2, 8)
+        payload = await read_json(request, 1024 * 1024)
+        if set(payload) != {"ttml"} or not isinstance(payload["ttml"], str):
+            raise HTTPException(400, "Send a TTML document.")
+        try:
+            result = await asyncio.to_thread(convert_ttml, payload["ttml"])
+        except TtmlError as error:
+            raise HTTPException(400, str(error)) from None
+        authenticate(request)
+        return JSONResponse(result)
+
     return [Route("/__lyrics/providers", providers, methods=["POST"]),
+            Route("/__lyrics/import-ttml", import_ttml, methods=["POST"]),
             Route("/__lyrics/search", search, methods=["POST"])]

@@ -6,10 +6,11 @@ import re
 import unicodedata
 from urllib.parse import urlsplit
 
-PROVIDER_LABELS = {"lrclib": "LRCLIB", "netease": "NetEase", "musixmatch": "Musixmatch"}
+PROVIDER_LABELS = {"lrclib": "LRCLIB", "netease": "NetEase", "amll": "AMLL TTML", "musixmatch": "Musixmatch"}
 SOURCE_HOSTS = {
     "lrclib": {"lrclib.net"}, "netease": {"music.163.com"},
     "musixmatch": {"musixmatch.com", "www.musixmatch.com"},
+    "amll": {"github.com"},
 }
 TIMESTAMP = re.compile(r"\[\d{1,3}:[0-5]\d(?:[.:]\d{1,3})?\]")
 METADATA = re.compile(r"^\[(?:ar|ti|al|by|re|ve|length|id):.*\]\s*$", re.I)
@@ -37,6 +38,8 @@ def source_url(provider, value):
         url = urlsplit(value)
         if (url.scheme == "https" and url.hostname in SOURCE_HOSTS[provider] and
                 not url.username and not url.password and url.port in (None, 443)):
+            if provider == "amll" and not url.path.startswith("/amll-dev/amll-ttml-db/"):
+                return ""
             return value
     except ValueError:
         pass
@@ -73,7 +76,10 @@ def normalize_result(provider, row):
     source = {"id": provider, "label": PROVIDER_LABELS[provider], "url": source_url(provider, row.get("sourceUrl"))}
     return {"trackName": title, "artistName": artist, "duration": duration(row.get("duration")),
             "syncedLyrics": synced or None, "plainLyrics": plain or None, "sources": [source],
-            "copyright": text(row.get("copyright"), 2000)}
+            "copyright": text(row.get("copyright"), 2000),
+            "wordTimed": bool(synced and (row.get("wordTimed") if type(row.get("wordTimed")) is bool else re.search(r"<\d{1,3}:\d{2}(?:\.\d+)?>[^<\r\n]+", synced))),
+            "format": "ttml" if row.get("format") == "ttml" else "lrc",
+            "warnings": [value for value in row.get("warnings", []) if value in ("background", "auxiliary", "overlap", "reserved_characters")][:4] if isinstance(row.get("warnings"), list) else []}
 
 
 def fold(value):
