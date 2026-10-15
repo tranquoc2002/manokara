@@ -2,15 +2,26 @@
   "name": "manokara",
   "private": true,
   "scripts": {
+    "start": "node scripts/start-local.cjs",
+    "dev": "node scripts/dev.cjs",
     "build:ui": "node scripts/build-ui.cjs",
-    "build:romaji": "node scripts/build-romaji.cjs"
+    "build:romaji": "node scripts/build-romaji.cjs",
+    "build:react": "node scripts/build-react.cjs",
+    "dev:react": "vite --config vite.dev.config.js",
+    "build:overlay": "node scripts/build-overlay.cjs"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "5.3.0",
     "@phosphor-icons/core": "2.1.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "esbuild": "0.25.12",
     "kuroshiro": "1.2.0",
     "kuroshiro-analyzer-kuromoji": "1.1.0",
-    "path-browserify": "1.0.1"
+    "path-browserify": "1.0.1",
+    "vite": "^7.3.7"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }

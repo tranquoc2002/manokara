@@ -58,11 +58,12 @@
 
 html,body {
   margin: 0;
-  height: 100%;
-  overflow: hidden
+  min-height: 100%;
+  overflow: auto
 }
 
 body {
+  min-height: 100dvh;
   max-width: 1840px;
   margin-inline: auto;
   padding: 0 26px;
@@ -287,8 +288,9 @@ b,strong {
 
 #grid {
   display: grid;
-  grid-template-columns: 240px minmax(0,1fr) 286px;
-  gap: 18px;
+  grid-template-columns: clamp(200px,13vw,250px) minmax(0,1fr) clamp(280px,20vw,348px) clamp(240px,20vw,360px);
+  grid-template-areas: "setlist main output lyrics";
+  gap: 12px;
   flex: 1;
   min-width: 0;
   min-height: 0
@@ -350,10 +352,55 @@ b,strong {
 }
 
 #setlistSide {
+  grid-area: setlist;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden
+}
+
+.setlist-head {
+  padding-bottom: 10px;
+  flex-wrap: wrap
+}
+
+.setlist-head .section-title {
+  flex: 1 1 auto
+}
+
+.setlist-library {
+  gap: 6px;
+  padding: 6px 8px;
+  min-height: 34px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  white-space: nowrap
+}
+
+@media (max-width:1180px) {
+  .setlist-library {
+    flex: 1 0 100%;
+    justify-content: center
+  }
+}
+
+.setlist-library .icon {
+  width: 16px;
+  height: 16px
+}
+
+.setlist-library .count {
+  min-width: 20px;
+  text-align: center
+}
+
+.setlist-add {
+  width: calc(100% - 32px);
+  margin: 0 16px 12px;
+  min-height: 42px;
+  background: var(--ac);
+  color: var(--ac-fg);
+  font-weight: 650
 }
 
 ol {
@@ -438,20 +485,22 @@ ol {
 .list-actions {
   grid-column: 2;
   display: flex;
-  gap: 1px;
-  margin-top: 7px
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+  margin-top: 8px
 }
 
 .list-actions button {
-  min-height: 25px;
-  width: 27px;
-  padding: 5px;
+  min-height: 34px;
+  width: 34px;
+  padding: 6px;
   color: var(--mu)
 }
 
 .list-actions .icon {
-  width: 14px;
-  height: 14px
+  width: 18px;
+  height: 18px
 }
 
 .on .list-actions button {
@@ -520,6 +569,7 @@ ol {
 }
 
 #maincol {
+  grid-area: main;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -528,8 +578,17 @@ ol {
 }
 
 #player {
-  flex: none;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
   padding: 12px 12px 0
+}
+
+#stage {
+  flex: 1;
+  height: auto;
+  min-height: 240px
 }
 
 .player-head {
@@ -537,6 +596,81 @@ ol {
   align-items: center;
   justify-content: space-between;
   padding: 4px 7px 12px
+}
+
+.stage-view-switch {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  margin-inline: auto
+}
+
+.stage-view-switch button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mu);
+  font-size: 12px;
+  white-space: nowrap
+}
+
+.stage-view-switch button[aria-pressed="true"] {
+  background: var(--soft);
+  color: var(--ac)
+}
+
+.stage-lyric-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: repeating-conic-gradient(#26332c 0% 25%,#202b25 0% 50%) 0 / 24px 24px
+}
+
+.stage-lyric-preview iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color-scheme: light;
+  pointer-events: none
+}
+
+.stage-preview-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px;
+  color: #bed5ad;
+  font-size: 14px;
+  background: var(--stage)
+}
+
+.stage-preview-message .icon {
+  width: 32px;
+  height: 32px
+}
+
+@media (max-width:1450px) {
+  .player-head {
+    flex-wrap: wrap;
+    gap: 8px
+  }
+  .stage-view-switch {
+    margin-inline: 0
+  }
+  .player-head .playback-state {
+    margin-left: auto
+  }
 }
 
 .player-head .eyebrow {
@@ -568,7 +702,9 @@ ol {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: clamp(180px,40dvh,560px);
+  flex: 1;
+  height: auto;
+  min-height: 240px;
   background: var(--stage);
   border-radius: 10px;
   overflow: hidden;
@@ -576,14 +712,27 @@ ol {
   text-align: center
 }
 
-#stage>iframe,#stage>video {
+#stageMediaRoot {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%
+}
+
+#stageMediaRoot>iframe,#stageMediaRoot>video,#stageMediaRoot>div iframe {
   width: 100%;
   height: 100%;
   border: 0;
   object-fit: contain
 }
 
-#stage:has(iframe),#stage:has(video) {
+#stageMediaRoot>div {
+  width: 100%;
+  height: 100%
+}
+
+#stage:has(#stageMediaRoot iframe),#stage:has(#stageMediaRoot video) {
   background: #0e1510
 }
 
@@ -749,6 +898,11 @@ ol {
   align-items: center;
   gap: 5px
 }
+
+.song-style-settings { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.song-style-settings .inline-check { line-height: 1.5; }
+.song-style-settings small { color: var(--mu); }
+.song-style-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .transport button {
   min-height: 35px
@@ -940,65 +1094,19 @@ textarea {
 }
 
 #workspace {
-  flex: 1;
-  min-height: 0;
+  grid-area: output;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden
 }
 
-.workspace-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 19px 0;
-  border-bottom: 1px solid var(--line);
-  flex: none
-}
-
-.workspace-tabs button {
-  position: relative;
-  border-radius: 0;
-  background: transparent;
-  color: var(--mu);
-  font-size: 12px;
-  padding: 11px 10px 14px;
-  min-height: 46px
-}
-
-.workspace-tabs button:hover {
-  background: var(--input);
-  filter: none
-}
-
-.workspace-tabs button[aria-selected="true"] {
-  color: var(--ac);
-  font-weight: 600
-}
-
-.workspace-tabs button[aria-selected="true"]:after {
-  position: absolute;
-  content: '';
-  height: 2px;
-  bottom: -1px;
-  left: 10px;
-  right: 10px;
-  background: var(--ac);
-  border-radius: 2px
-}
-
-.workspace-tabs .icon {
-  width: 16px;
-  height: 16px
-}
-
-.workspace-hint {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--mu)
+#workspace #panel-green {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px
 }
 
 .tabpanel {
@@ -1007,6 +1115,153 @@ textarea {
   min-height: 0;
   overflow: auto;
   padding: 20px 24px 24px
+}
+
+.studio-dialog {
+  width: min(980px,calc(100vw - 32px));
+  max-width: none;
+  max-height: min(92dvh,1040px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: 0 24px 90px #0006
+}
+
+.studio-dialog[open] {
+  display: flex;
+  flex-direction: column
+}
+
+.studio-dialog::backdrop {
+  background: #090d0bd1;
+  backdrop-filter: blur(4px)
+}
+
+.studio-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  flex: none
+}
+
+.studio-dialog-head h2 {
+  margin: 2px 0 0;
+  font-size: 18px
+}
+
+#songEditorMount {
+  display: flex;
+  flex: 1;
+  min-height: 0
+}
+
+.studio-dialog #panel-song {
+  width: 100%;
+  min-height: 0;
+  padding: 22px 26px 28px
+}
+
+.library-dialog {
+  width: min(680px,calc(100vw - 32px))
+}
+
+.library-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 22px 24px
+}
+
+.library-content>p {
+  margin: 0 0 16px
+}
+
+.library-content .field {
+  margin-bottom: 12px
+}
+
+.library-empty {
+  padding: 22px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--mu);
+  text-align: center
+}
+
+#libraryList {
+  display: grid;
+  gap: 7px;
+  max-height: min(56dvh,560px);
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  list-style: none
+}
+
+#libraryList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--input)
+}
+
+.library-song-info {
+  display: grid;
+  min-width: 0
+}
+
+.library-song-info b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.library-song-info small {
+  color: var(--mu)
+}
+
+.library-song-actions {
+  display: flex;
+  flex: none;
+  gap: 5px
+}
+
+.setlist-head-actions {
+  gap: 4px
+}
+
+.setlist-head-actions #openLibrary {
+  gap: 5px;
+  padding-inline: 7px;
+  font-size: 11px
+}
+
+.setlist-head-actions .count {
+  min-width: 19px;
+  height: 19px;
+  padding-inline: 5px;
+  font-size: 10px
+}
+
+.library-save-check {
+  align-self: center;
+  white-space: nowrap
+}
+
+.lyric-load-status {
+  margin: 8px 0 0;
+  color: var(--ac);
+  font-size: 12px;
+  font-weight: 600
 }
 
 .panel-intro {
@@ -1053,7 +1308,7 @@ textarea {
 }
 
 #lres {
-  max-height: 160px;
+  max-height: 260px;
   overflow: auto
 }
 
@@ -1062,22 +1317,115 @@ textarea {
 }
 
 #lres li {
+  padding: 0
+}
+
+#lres li .lyric-result-button {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
+  min-height: 0;
   padding: 11px;
+  border: 0;
   border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px
+  background: transparent;
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left
 }
 
-#lres li:hover {
+#lres li .lyric-result-button:hover {
   background: var(--soft)
 }
 
-#lres li small {
+#lres li .lyric-result-button small {
   flex: none
+}
+
+#lres li.search-message {
+  padding: 11px;
+  color: var(--mu);
+  cursor: default
+}
+
+#lres li.search-message:hover {
+  background: transparent
+}
+
+.lyric-source-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  color: var(--mu);
+  font-size: 12px
+}
+
+.lyric-source-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%
+}
+
+.lyric-source-controls select {
+  min-width: 0;
+  max-width: 250px;
+  min-height: 34px;
+  font-size: 12px
+}
+
+.lyric-result-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere
+}
+
+.lyric-result-copy small,.lyric-result-sources,.lyric-source-notices,.lyric-attribution {
+  color: var(--mu);
+  font-size: 11px;
+  line-height: 1.5
+}
+
+.lyric-result-copy .lyric-result-timed {
+  color: var(--ac)
+}
+
+.lyric-result-sources {
+  padding: 0 11px 10px;
+  overflow-wrap: anywhere
+}
+
+.lyric-result-sources a,.lyric-attribution a {
+  color: inherit;
+  text-underline-offset: 3px
+}
+
+.lyric-source-notices {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px
+}
+
+.lyric-attribution {
+  margin: 8px 0;
+  overflow-wrap: anywhere
+}
+
+.lyric-attribution small {
+  display: block
+}
+
+.live-lyric-source {
+  padding-inline: 16px;
+  max-height: 60px;
+  overflow: auto;
+  flex-shrink: 0
 }
 
 .editor-toolbar {
@@ -1434,10 +1782,40 @@ details summary {
 }
 
 #side {
+  grid-area: lyrics;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden
+}
+
+.lyrics-mode-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 10px;
+  padding: 0 18px 12px;
+  border-bottom: 1px solid var(--line)
+}
+
+.lyrics-mode-row label {
+  color: var(--mu);
+  font-size: 11px;
+  font-weight: 600
+}
+
+.lyrics-mode-row select {
+  min-width: 112px;
+  min-height: 30px;
+  padding: 4px 25px 4px 9px;
+  font-size: 12px
+}
+
+.lyrics-mode-row small {
+  flex: 1 1 100%;
+  color: var(--mu);
+  font-size: 10px;
+  line-height: 1.35
 }
 
 .lyrics-heading {
@@ -1711,20 +2089,13 @@ kbd {
   scrollbar-color: var(--line) transparent
 }
 
-@media (min-width:1600px) {
-  #grid {
-    grid-template-columns: 265px minmax(0,1fr) 310px;
-    gap: 22px
-  }
-}
+#karaokeReactRoot,#playerReactRoot,#obsSettingsReactRoot { display:contents }
+#transposeDialogReactRoot { display:contents }
+#libraryDialogReactRoot { display:contents }
 
 @media (max-width:1180px) {
   body {
     padding-inline: 16px
-  }
-  #grid {
-    grid-template-columns: 185px minmax(0,1fr) 240px;
-    gap: 12px
   }
   .section-head {
     padding: 18px 15px 12px
@@ -1758,12 +2129,6 @@ kbd {
     gap: 7px
   }
   #yt span {
-    display: none
-  }
-  .workspace-tabs {
-    padding-inline: 10px
-  }
-  .workspace-hint {
     display: none
   }
   .search-row {
@@ -1848,7 +2213,7 @@ kbd {
     max-height: 480px
   }
   #side {
-    order: 2;
+    order: 0;
     min-height: 430px;
     max-height: 700px
   }
@@ -1898,6 +2263,9 @@ kbd {
   #workspace {
     min-height: 300px;
     overflow: visible
+  }
+  .studio-dialog #panel-song {
+    overflow: auto
   }
   .field-grid {
     grid-template-columns: minmax(0,1.5fr) minmax(0,1fr)
@@ -1950,6 +2318,28 @@ kbd {
 }
 
 @media (max-width:480px) {
+  .studio-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 13px
+  }
+  .studio-dialog-head {
+    padding: 12px 15px
+  }
+  .studio-dialog #panel-song {
+    padding: 16px
+  }
+  .library-content {
+    padding: 14px
+  }
+  #libraryList li {
+    gap: 8px;
+    padding: 8px
+  }
+  .library-song-actions button.s {
+    min-width: 52px;
+    padding-inline: 8px
+  }
   body {
     padding-inline: 10px
   }
@@ -2038,9 +2428,6 @@ kbd {
   }
   #msg {
     font-size: 11px
-  }
-  .workspace-tabs {
-    padding-inline: 13px
   }
   .tabpanel {
     padding: 18px 16px
@@ -2135,11 +2522,6 @@ kbd {
   text-decoration: none
 }
 
-.workspace-hint .icon {
-  width: 13px;
-  height: 13px
-}
-
 .stage-empty.mc-stage p {
   font-size: 14px;
   color: #b4cbae;
@@ -2173,5 +2555,174 @@ kbd {
     flex-direction: row;
     align-items: center;
     gap: 10px
+  }
+}
+
+/* Karaoke has four independent columns. Only this workspace locks the page;
+   the Overlay editor and small-screen layouts keep their natural page flow. */
+#grid #workspace .output-connect {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px
+}
+
+#grid #workspace .output-connect h2 {
+  font-size: 16px;
+  line-height: 1.4
+}
+
+#grid #workspace .output-connect p {
+  font-size: 11px
+}
+
+#grid #workspace .settings-grid {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 12px 10px
+}
+
+#grid #workspace .type-settings {
+  grid-template-columns: minmax(0,1fr)
+}
+
+#grid #workspace .output-reaction {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px
+}
+
+#grid #workspace .field select,#grid #workspace .field input {
+  width: 100%
+}
+
+#grid #workspace .obs-note {
+  flex-wrap: wrap;
+  gap: 5px
+}
+
+#grid #workspace #editLyricLayout {
+  width: 100%;
+  margin-top: 12px
+}
+
+@media (min-width:1280px) {
+  html:has(#grid:not([hidden])),body:has(#grid:not([hidden])) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden
+  }
+  body:has(#grid:not([hidden])) {
+    max-width: none;
+    padding-inline: 16px
+  }
+  #grid {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0,1fr);
+    align-items: stretch
+  }
+  #grid>#setlistSide,#grid>#maincol,#grid>#workspace,#grid>#side {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    position: static;
+    align-self: stretch
+  }
+  #grid #player {
+    min-height: 0;
+    overflow: hidden
+  }
+  #grid #stage {
+    flex: 1;
+    min-height: 160px
+  }
+  #grid .player-head,#grid .now-row,#grid .transport,#grid .player-options {
+    flex: none
+  }
+  #grid .transport {
+    flex-wrap: wrap;
+    gap: 8px 12px
+  }
+  #grid .player-options {
+    flex-wrap: wrap;
+    gap: 7px
+  }
+  #grid #msg {
+    max-width: 100%;
+    text-align: left
+  }
+  #grid .lyrics-heading,#grid .lyrics-mode-row,#grid .lyrics-footer {
+    flex: none
+  }
+  #grid #pan {
+    flex: 1;
+    min-height: 0;
+    overscroll-behavior: contain
+  }
+  #grid #panel-green,#grid #list {
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable
+  }
+  #grid .setlist-head {
+    padding-inline: 16px;
+    gap: 8px
+  }
+  #grid .setlist-library {
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    padding-left: 0
+  }
+  #grid .list-actions {
+    grid-column: 1/-1;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 3px
+  }
+  #grid .list-actions .icon {
+    width: 20px;
+    height: 20px
+  }
+}
+
+@media (min-width:851px) and (max-width:1279px) {
+  #grid {
+    flex: none;
+    grid-template-columns: minmax(0,.85fr) minmax(0,1.15fr);
+    grid-template-areas: "setlist main" "output lyrics";
+    grid-template-rows: auto auto;
+    align-items: stretch
+  }
+  #grid #setlistSide {
+    min-height: 300px;
+    max-height: 540px
+  }
+  #grid #maincol {
+    min-height: 400px
+  }
+  #grid #stage {
+    aspect-ratio: 16/9;
+    min-height: 180px
+  }
+  #grid #workspace,#grid #side {
+    height: 650px;
+    min-height: 0
+  }
+}
+
+@media (max-width:850px) {
+  #grid #setlistSide { order: 0 }
+  #grid #maincol { order: 1 }
+  #grid #workspace {
+    order: 2;
+    min-height: 0;
+    overflow: visible
+  }
+  #grid #workspace #panel-green {
+    flex: none;
+    overflow: visible
+  }
+  #grid #side {
+    order: 3;
+    height: 650px;
+    min-height: 0
   }
 }

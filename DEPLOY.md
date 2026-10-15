@@ -15,6 +15,36 @@ sudo pacman -S --needed yt-dlp ffmpeg deno python-curl_cffi
 
 Use Python 3.12 or newer. The app is public and requires no password or account.
 
+### Lyric providers
+
+After updating an existing installation, run `.venv/bin/python -m pip install -r requirements.txt` and restart Python. Multi-source search now runs through authenticated `/__lyrics/search` and `/__lyrics/providers` endpoints; the production requirements include HTTPX. No separate worker, Node process or lyric database is needed. Allow outbound HTTPS to `lrclib.net`, `music.163.com` and, when enabled, `api.musixmatch.com`.
+
+The default catalog is LRCLIB and NetEase, plus Musixmatch when its API key is configured. Searches run concurrently and rank actual timed LRC before plain text, then match title/artist and known media duration. There is no provider preference. Each adapter fetches a bounded candidate set, so the combined list is not an exhaustive catalog search. NetEase uses an undocumented endpoint without account cookies; verification or regional restrictions appear as a source warning. Other sources continue to return results.
+
+Optional environment variables belong in your **private** start script or environment, never committed frontend code:
+
+```sh
+# Restrict the enabled sources if needed (default: all three, with Musixmatch key-gated).
+export MANOKARA_LYRIC_PROVIDERS="lrclib,netease,musixmatch"
+# Optional licensed Musixmatch API access, including track.subtitle.get permission.
+export MANOKARA_MUSIXMATCH_API_KEY="your-key"
+```
+
+Leave optional key variables unset when unused. Musixmatch stays disabled without its key; desktop/session token workarounds are not used. An enabled key can still lack subtitle rights, in which case the UI reports the access problem. Follow the provider's applicable display, territory, caching and OBS/broadcast licensing conditions; supplying a key does not grant additional usage rights.
+
+Manokara shows source links in search, the editor and live lyrics, and keeps source metadata with saved songs. A short RAM cache, bounded request budgets and upstream `Retry-After` cooldowns limit repeated calls. There is no catalog mirroring or lyric cache on disk. Each complete search has up to six concurrent jobs globally and a ten-second provider budget; identical in-flight searches share one job. Cached responses have a total 8 MiB/96-entry limit. Lyricsify retains its separate external search/import button.
+
+### Build the frontend before deploying
+
+The production VPS does not need Node.js. On the development machine, use Node.js 20.19+ or 22.12+ and npm to create the static React bundle from the pinned lockfile:
+
+```sh
+npm ci
+npm run build:react
+```
+
+Deploy the generated `outputs/manokara-react.js` and `outputs/manokara-overlay.js`, updated HTML/CSS/assets, and the complete **`server/` package alongside `outputs/`**. `outputs/manokara_server.py` is a compatible launcher that imports this package; copying only `outputs/` is no longer sufficient. A normal checkout/update of the whole repository includes both directories. The Python server continues to serve the built frontend; it does not run Vite or a Node process.
+
 The hostname in `start-manokara.sh` is already set to `https://mano.del4yowo.id.vn`; change it if needed. If your checkout is somewhere other than `$HOME/manokara`, change the two paths in the last line. The complete script is:
 
 ```sh
@@ -67,9 +97,17 @@ Keep port 8000 private. Avoid Cloudflare HTML/JavaScript rewriting such as Rocke
 
 ## Runtime behavior
 
+### Backend package and upgrades
+
+`server/app.py` composes routes, schemas, security, repositories and services. The launcher resolves the package/assets relative to its own filename, so the existing absolute-path shell command still works from another working directory. Keep the current `MANOKARA_DATA_DIR`, origin and single-worker launch settings. The credentials/room database schema and OBS token derivation are unchanged; moving the implementation does not require a fresh database or replacement OBS links.
+
+Restart the Python process after deploying backend source changes. The already running process keeps its imported modules until restart; refreshing the web page alone does not load this update. Do not increase Uvicorn workers: live snapshots, writer leases, viewer capacity and media quotas remain in one process. The new Python files are not part of the public static asset manifest.
+
+Run backend checks with `python -m pytest tests/test_security.py tests/test_media.py tests/test_relay_stream.py tests/test_backend_modules.py`. Test dependencies are in `requirements-dev.txt`; these checks use isolated temporary data, not the configured production database.
+
 ### Playlist overlay and layout editor
 
-Deploy the updated controller/session/i18n/tour/server along with `manokara_overlay.py`, `manokara-overlay.js`, `manokara-studio.js` / `.css`, `manokara-playlist.html` / `.css`, `manokara-viewer.js` / `.css`, `manokara-obs.html` and `manokara-lyrics-view.html`. Restart Python so its asset manifest, content security policy and state validation include the new files, then reload the controller and existing OBS source. No new dependency or build step is needed.
+The Playlist and Overlay Studio interface and editor are included in `manokara-react.js`; build that bundle locally with `npm run build:react` before deploying. Keep `manokara-studio.css`, `manokara-overlay.js`, `manokara-playlist.html` / `.css`, `manokara-viewer.js` / `.css`, `manokara-obs.html` and `manokara-lyrics-view.html` for the editor and OBS renderers. The production server still runs Python only. Restart Python after updating so its asset manifest and content security policy include the new bundle, then reload the controller and existing OBS source.
 
 The original lyric URL still works. In the main **Playlist** tab, copy a separate playlist URL into another OBS Browser Source. Use the frame dimensions shown by the editor for both sources. Viewer tokens remain in URL fragments and both outputs follow the same room/revocation rules. The playlist transfers bounded song metadata and layout settings, never executable theme HTML/CSS from uploads. JSON layout imports accept only Manokara's data schema. The request body limit is 384 KiB to accommodate bounded playlist metadata alongside lyrics; existing lyric length checks remain in place.
 
@@ -81,7 +119,7 @@ When YouTube's oEmbed title lookup fails, the app fetches the title through the 
 
 Video and audio streams are resolved just before playback and remuxed into fragmented MP4 through stdout. Media and signed URLs are never saved to disk or SQLite. Streaming still transfers media bytes: the VPS receives the video and relays it through your tunnel, consuming its bandwidth. The fallback supports public/unlisted, unrestricted recorded videos up to two hours, selects H.264/AAC up to 720p, and bounds lookups to four, active video streams to eight globally/two per browser, and each transfer to 256 MiB. OBS remains a separate read-only lyric output. Other browsers and OBS links cannot use your video relay.
 
-The fallback supports the app's pause, countdown and Start/End controls. Start cuts can align near video keyframes; use live lyric sync if needed. Arbitrary seeking to unbuffered portions is unavailable with this pipe stream. Cookies and yt-dlp do not change the uploader's embedding permission or guarantee that YouTube will supply playable streams.
+The fallback supports pause, countdown and Start/End. Its native media controls allow seeking within loaded fragments; they do not provide a complete-file timeline. The app's time label uses source metadata for the complete duration. The additional app seek bar was removed after user feedback. Start cuts can align near video keyframes; use live lyric sync if needed. Cookies and yt-dlp do not change the uploader's embedding permission or guarantee that YouTube will supply playable streams.
 
 Chrome impersonation requires yt-dlp's curl-cffi support, provided by Arch's [python-curl_cffi package](https://archlinux.org/packages/extra/x86_64/python-curl_cffi/). Check `yt-dlp --list-impersonate-targets` if needed. Unset `MANOKARA_YTDLP_IMPERSONATE` to disable impersonation. It applies to yt-dlp's requests; FFmpeg uses its own transport for media.
 
@@ -140,23 +178,31 @@ To rebuild Romaji assets from pinned dependencies, run `npm ci --ignore-scripts`
 
 ## Live OBS updates
 
-Deploy `manokara-relay.js`, `manokara-audio.js`, the updated controller/core/server and the rebuilt Folia entry/bundles together, then restart Python and refresh both the controller and OBS source. OBS uses `GET /__lyric-state?room=…&stream=1` with its existing Authorization header and `Content-Type: text/event-stream`. Preserve that content type through Cloudflare Tunnel; do not cache/buffer the endpoint. Normal polling remains available when streaming cannot connect. Keep one backend worker, as room playback/events live in that process. Audio sharing requires a secure context (HTTPS or local loopback) and explicit user selection of a tab with audio enabled.
+Deploy `manokara-react.js` for the controller, plus `manokara-relay.js`, `manokara-core.js`, the server and rebuilt Folia entry/bundles. The controller bundle includes the session, audio and lyric editor modules; OBS viewers continue to load their standalone clock and relay files. Restart Python and refresh both the controller and OBS source. OBS uses `GET /__lyric-state?room=…&stream=1` with its existing Authorization header and `Content-Type: text/event-stream`. Preserve that content type through Cloudflare Tunnel; do not cache/buffer the endpoint. Normal polling remains available when streaming cannot connect. Keep one backend worker, as room playback/events live in that process. Audio sharing requires a secure context (HTTPS or local loopback) and explicit user selection of a tab with audio enabled.
 
 Cloudflare documents its streaming content-type requirement in [Tunnel troubleshooting](https://developers.cloudflare.com/tunnel/troubleshooting/). The app sends no recording, only six energy levels; actual lyric/word timing comes from LRC, not audio beat detection.
 
 ## Updating the interface
 
-Deploy the updated `outputs/manokara.html`, `outputs/manokara-obs.html`, `outputs/manokara_server.py`, `outputs/manokara-ui.css`, `outputs/manokara-icons.svg` and the entire `outputs/ui-assets/` directory together. Restart your existing Python process using your start script and reload the page and OBS source. Fonts and icons are prebuilt and served by Python; no new service or build step is needed on the VPS. Keep the other existing output assets when updating.
+Deploy the updated `outputs/manokara.html`, `outputs/manokara-react.js`, `outputs/manokara-obs.html`, `outputs/manokara_server.py`, `outputs/manokara-ui.css`, `outputs/manokara-icons.svg` and the entire `outputs/ui-assets/` directory together. Build the React bundle locally with `npm run build:react` before deploying; production still runs on the Python server and needs no Node service. Restart your existing Python process using your start script and reload the page and OBS source. Fonts and icons are prebuilt and served by Python. Keep the other existing output assets when updating.
 
-The header's YouTube search also needs the updated `outputs/manokara_media.py`, `outputs/manokara-search.js`, `outputs/manokara-search.css` and `outputs/manokara-i18n.js`. Keep the guide assets (`manokara-tour.js` / `.css`) too. The VPS setup already installs yt-dlp, which search uses without an API key. Flat searches do not depend on `MANOKARA_YTDLP_ENABLED`, FFmpeg or a JavaScript runtime. If yt-dlp is absent, install it on PATH or in the server's Python environment with `.venv/bin/python -m pip install -U yt-dlp`. No cookie sharing is used for search. YouTube can still reject or temporarily throttle requests; the dropdown retains an external YouTube search link.
+The React bundle contains the YouTube search, guide, language, and Overlay Studio modules; deploy `outputs/manokara_media.py`, `outputs/manokara-react.js`, `outputs/manokara-search.css`, and `outputs/manokara-studio.css` together. The VPS setup already installs yt-dlp, which search uses without an API key. Flat searches do not depend on `MANOKARA_YTDLP_ENABLED`, FFmpeg or a JavaScript runtime. If yt-dlp is absent, install it on PATH or in the server's Python environment with `.venv/bin/python -m pip install -U yt-dlp`. No cookie sharing is used for search. YouTube can still reject or temporarily throttle requests; the dropdown retains an external YouTube search link.
 
 ## Source and notices
 
 ### Built-in pitch / song key
 
-Include `manokara-pitch.js`, `manokara-pitch.css` and `pitch-assets/` when deploying. Restart the Python server to load its updated asset allowlist and the narrowly scoped `wasm-unsafe-eval` policy required by the bundled Signalsmith AudioWorklet (JavaScript eval is not enabled for the controller).
+Main-page refresh keeps the existing Tab Audio window and stream alive. A sessionStorage channel is reused for reloads; newly opened controllers receive a fresh identity. The popup discovers its reloaded opener via same-origin messages and verifies the source Capture Handle before resuming output. A briefly null handle during reload pauses output with a 30-second reconnection limit. A different source, a closed opener or stopped browser tracks still ends capture. This reuses an already approved live stream; it does not store browser capture permission or bypass the picker. Refreshing the audio window itself still destroys its stream.
 
-Nonzero YouTube key uses the existing yt-dlp/FFmpeg streaming route; it requires `MANOKARA_YTDLP_ENABLED=1` and yt-dlp, FFmpeg, plus Deno or Node on the server account's PATH. The supplied VPS start script already enables streaming. For local PowerShell, enable it before starting the server:
+The experimental YouTube pitch path uses **Tab Audio**, with the original iframe as the playback clock. **Key → Start Tab Audio** opens `/manokara-tab-audio.html`; the user clicks **Choose Manokara tab**, selects the source tab and enables **Share tab audio**. The separate same-origin window uses `getDisplayMedia` → MediaStreamAudioSourceNode → Signalsmith AudioWorklet → local speakers. It does not request media from yt-dlp or transfer music through the tunnel. Capture Handle identifies the source tab, and `suppressLocalAudioPlayback` must be active before processing is allowed. A wrong source, missing audio, unsupported suppression or a source change stops capture and restores original playback. Capture processing stays outside the source tab to avoid feedback. The UI exchanges only saved key, title, language, track/timeline identity and status; messages are checked against the popup/opener, same origin and per-page channel. Video is not displayed, recorded or uploaded. No microphone access is used.
+
+Keep the audio window open, including when returning to Manokara to seek, pause or change key. One capture session follows the setlist's saved keys. Resetting key 0 bypasses DSP while keeping the session; **Stop Tab Audio**, stopping browser sharing or closing either window releases capture. Settings remain saved. The browser requires a user gesture and a new picker approval when capture starts again. This needs an updated desktop Chrome/Edge on HTTPS or localhost, with Capture Handle and original-audio suppression support. OBS must capture the processed browser audio; do not mix an additional unprocessed source. The lyric clock compensates using estimated capture/processor/device latency, which cannot guarantee exact physical device synchronization.
+
+`python tests/browser_smoke.py --pitch-only` exercises the real WASM/AudioWorklet with a synthetic stream and capture picker fixture, including key reuse, native seeking, saved keys and failure cleanup. It does not establish real browser capture support, listening quality or OBS routing on the user's device. Verify those manually before relying on this experimental mode in a stream. The extra app seek bar and the separate YouTube audio source have been removed. The video fallback remains available for embed errors.
+
+Include `manokara-pitch.js`, `manokara-pitch.css`, `manokara-tab-audio.html`, `manokara-tab-audio.js`, `manokara-tab-audio.css` and `pitch-assets/` when deploying. Rebuild the React bundle and restart Python to load the updated allowlist and narrowly scoped `wasm-unsafe-eval` policy for the capture page/AudioWorklet. JavaScript eval remains disabled. Display capture is permitted for the controller/capture page and denied on other served resources; camera/microphone access remains denied.
+
+Tab Audio does not need yt-dlp/FFmpeg. The YouTube video fallback still uses the streaming route and requires `MANOKARA_YTDLP_ENABLED=1` and yt-dlp, FFmpeg, plus Deno or Node on the server account's PATH. The supplied VPS start script already enables fallback streaming. For local PowerShell:
 
 ```powershell
 $env:MANOKARA_YTDLP_ENABLED="1"
@@ -177,7 +223,7 @@ Successful public metadata is cached for five minutes; concurrent lookups for th
 
 The relay detects FFmpeg's HLS `extension_picky` option and adjusts it only for validated YouTube HLS input, whose segment URLs can lack filename extensions. HTTPS transport restrictions and metadata validation still apply. This avoids newer FFmpeg builds rejecting otherwise playable AAC segments. Restart the server after updating the media backend.
 
-YouTube can still reject stream lookups. Manokara reports lookup or processor failures and falls back to the original key; enabling pitch does not bypass those restrictions. A direct media source must permit CORS or be served from the same origin. Use Chrome/Edge over HTTPS or localhost for AudioWorklet.
+YouTube can still reject fallback stream lookups; changing key no longer triggers those lookups for an embeddable video. A direct media source processed without Tab Audio must permit CORS or be served from the same origin. Use Chrome/Edge over HTTPS or localhost for AudioWorklet.
 
 The public `/sources/` URLs deliberately expose the bundled Folia source archive, its integration source, and third-party licenses/notices. Links are available from the controller page. Keep them when deploying updates. Arbitrary directories, Python source, dotfiles, and symlinked files are not served. See the bundled Folia notice for upstream licensing and usage terms.
 

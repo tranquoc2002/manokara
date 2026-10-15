@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manokara · Tab Audio</title>
+  <link rel="icon" href="./manokara.ico">
+  <link rel="stylesheet" href="./ui-assets/geist.css">
+  <link rel="stylesheet" href="./manokara-tab-audio.css">
+</head>
+<body>
+  <main>
+    <header><span class="badge">Manokara</span><h1>Tab Audio</h1><p id="intro"></p></header>
+    <ol><li id="step1"></li><li id="step2"></li><li id="step3"></li></ol>
+    <section class="now" aria-label="Current song"><span id="songLabel"></span><strong id="song">—</strong><div class="key"><span id="keyLabel"></span><output id="key">0</output></div></section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p id="latency"></p>
+    <div class="actions"><button id="start" type="button"></button><button id="stop" type="button" disabled></button></div>
+    <small id="note"></small>
+  </main>
+  <script src="./manokara-pitch.js"></script>
+  <script type="module" src="./manokara-tab-audio.js"></script>
+</body>
+</html>

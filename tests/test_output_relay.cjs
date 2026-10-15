@@ -56,3 +56,16 @@ test('optional tab audio yields bounded band levels and releases capture on Stop
   assert.equal(stops,2);
   assert.equal(closes,1);
 });
+
+test('disposing audio reaction stops a capture that resolves after disposal', async () => {
+  const window = new EventTarget(), previousClick = () => {}, button = {onclick:previousClick}, status = {};
+  let resolveCapture, stops = 0, contexts = 0;
+  const pending = new Promise(resolve => { resolveCapture = resolve; });
+  const sandbox = {Uint8Array,window,navigator:{mediaDevices:{getDisplayMedia:()=>pending}},
+    AudioContext:class{constructor(){contexts++}}};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../outputs/manokara-audio.js'),'utf8'),sandbox);
+  const audio = sandbox.ManokaraAudio.create(button,status), request = button.onclick();
+  audio.dispose();audio.dispose();assert.equal(button.onclick,previousClick);
+  resolveCapture({getTracks:()=>[{stop(){stops++}},{stop(){stops++}}]});await request;
+  assert.equal(stops,2);assert.equal(contexts,0);assert.ok(Object.values(audio.sample()).every(value=>value===0));
+});

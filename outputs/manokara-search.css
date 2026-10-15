@@ -1,4 +1,6 @@
 .app-header { gap:18px; }
+#appHeaderReactRoot { display:contents; }
+.app-header-react-grid { display:flex; align-items:center; justify-content:space-between; gap:18px; width:100%; min-width:0; }
 .header-search { position:relative; flex:1; min-width:170px; max-width:460px; margin-inline:auto; }
 .music-search-form { display:flex; align-items:center; gap:8px; min-height:36px; padding:0 5px 0 11px; border:1px solid var(--line); background:var(--input); border-radius:11px; }
 .music-search-form:focus-within { border-color:var(--ac); box-shadow:0 0 0 2px var(--soft); }
@@ -35,6 +37,7 @@
   .karaoke-search-toggle span { display:none; }
 }
 @media (max-width:850px) {
+  .app-header-react-grid { flex-wrap:wrap; gap:10px; }
   .header-search { order:3; flex-basis:100%; max-width:none; margin-bottom:3px; }
   #musicSearch { font-size:16px; }
   .music-search-menu { width:100%; }
@@ -42,6 +45,7 @@
 }
 @media (max-width:480px) {
   .app-header { column-gap:8px; }
+  .app-header-react-grid { column-gap:8px; }
   .youtube-thumbnail { width:84px; }
   .youtube-result { gap:8px; padding:7px 5px; }
   .music-search-menu { max-width:calc(100vw - 20px); }

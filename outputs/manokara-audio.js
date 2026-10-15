@@ -3,34 +3,46 @@
   'use strict';
   const ZERO = {audioPower:0,audioBass:0,audioLowMid:0,audioMid:0,audioVocal:0,audioTreble:0};
   function create(button, status) {
-    let stream, context, analyser, bins, active = false;
+    let stream, context, analyser, bins, active = false, disposed = false, revision = 0, pendingRequest = null;
+    const previousClick=button.onclick;
+    const endedListeners=[];
     let statusSource='Share the karaoke tab with tab audio enabled. No recording.';
-    const refresh=()=>{const translate=value=>globalThis.ManokaraI18n?.text(value)||value;button.textContent=translate(active?'Stop audio reaction':'Enable audio reaction');status.textContent=translate(statusSource)};
+    const refresh=()=>{if(disposed)return;const translate=value=>globalThis.ManokaraI18n?.text(value)||value;button.textContent=translate(active?'Stop audio reaction':'Enable audio reaction');status.textContent=translate(statusSource)};
     window.addEventListener('manokara:languagechange',refresh);
     const stop = () => {
+      revision++;pendingRequest=null;button.disabled=false;
+      endedListeners.splice(0).forEach(remove=>remove());
       active = false; stream?.getTracks().forEach(track => track.stop()); context?.close().catch(()=>{});
       stream = context = analyser = bins = null;
       statusSource='Share the karaoke tab with tab audio enabled. No recording.';refresh();
     };
-    button.onclick = async () => {
+    const click = async () => {
+      if(disposed)return;
       if (active) { stop(); return; }
+      const my=++revision;pendingRequest=my;
       button.disabled = true;
       try {
         if (!navigator.mediaDevices?.getDisplayMedia) throw Error('Use Chrome or Edge over HTTPS / localhost to share tab audio.');
-        stream = await navigator.mediaDevices.getDisplayMedia({video:true, audio:true, preferCurrentTab:true});
+        const selected=await navigator.mediaDevices.getDisplayMedia({video:true, audio:true, preferCurrentTab:true});
+        if(disposed||my!==revision){selected.getTracks().forEach(track=>track.stop());return}
+        stream=selected;
         if (!stream.getAudioTracks().length) throw Error('No tab audio selected. Choose the karaoke tab and enable Share tab audio.');
-        context = new AudioContext({latencyHint:'interactive'}); await context.resume();
+        const next=new AudioContext({latencyHint:'interactive'});context=next;await next.resume();
+        if(disposed||my!==revision){next.close().catch(()=>{});return}
         analyser = context.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = .55;
         context.createMediaStreamSource(stream).connect(analyser);
         bins = new Uint8Array(analyser.frequencyBinCount); active = true;
-        stream.getTracks().forEach(track => track.addEventListener('ended', stop, {once:true}));
+        stream.getTracks().forEach(track => {const ended=()=>{if(my===revision)stop()};track.addEventListener('ended',ended,{once:true});endedListeners.push(()=>track.removeEventListener?.('ended',ended));});
         statusSource='Folia reacts to the selected tab audio. Lyrics follow the LRC timecodes.';refresh();
-      } catch (error) { stop(); statusSource=error.message || 'Audio sharing cancelled.';refresh(); }
-      finally { button.disabled = false; }
+      } catch (error) { if(!disposed&&my===revision){stop();statusSource=error.message || 'Audio sharing cancelled.';refresh();} }
+      finally { if(pendingRequest===my){pendingRequest=null;button.disabled=false;} }
     };
+    button.onclick=click;
     window.addEventListener('pagehide', stop, {once:true});
     refresh();
     return {
+      stop,
+      dispose(){if(disposed)return;disposed=true;stop();window.removeEventListener?.('manokara:languagechange',refresh);window.removeEventListener?.('pagehide',stop);if(button.onclick===click)button.onclick=previousClick;},
       sample() {
         if (!active || context?.state !== 'running' || !analyser) return ZERO;
         analyser.getByteFrequencyData(bins);

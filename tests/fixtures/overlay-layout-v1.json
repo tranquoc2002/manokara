@@ -1,0 +1,1534 @@
+[
+  {
+    "input": null,
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 0.72,
+        "radius": 22,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 88,
+            "w": 640,
+            "h": 280,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 88,
+            "y": 384,
+            "w": 440,
+            "h": 528,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 384,
+            "w": 360,
+            "h": 208,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": "invalid JSON",
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 0.72,
+        "radius": 22,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 88,
+            "w": 640,
+            "h": 280,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 88,
+            "y": 384,
+            "w": 440,
+            "h": 528,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 384,
+            "w": 360,
+            "h": 208,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": [],
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 0.72,
+        "radius": 22,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 88,
+            "w": 640,
+            "h": 280,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 88,
+            "y": 384,
+            "w": 440,
+            "h": 528,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 384,
+            "w": 360,
+            "h": 208,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {},
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 0.72,
+        "radius": 22,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 88,
+            "w": 640,
+            "h": 280,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 88,
+            "y": 384,
+            "w": 440,
+            "h": 528,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 384,
+            "w": 360,
+            "h": 208,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 0.72,
+        "radius": 22,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 88,
+            "w": 640,
+            "h": 280,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 88,
+            "y": 384,
+            "w": 440,
+            "h": 528,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 384,
+            "w": 360,
+            "h": 208,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 0.72,
+        "radius": 22,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 88,
+            "w": 640,
+            "h": 280,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 88,
+            "y": 384,
+            "w": 440,
+            "h": 528,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 384,
+            "w": 360,
+            "h": 208,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "paper",
+        "foreground": "#433c35",
+        "accent": "#aa5139",
+        "background": "#faf3df",
+        "opacity": 0.97,
+        "radius": 3,
+        "font": "serif",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 88,
+            "w": 580,
+            "h": 288,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 96,
+            "y": 392,
+            "w": 580,
+            "h": 504,
+            "size": 28,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 700,
+            "y": 120,
+            "w": 320,
+            "h": 264,
+            "size": 30,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "paper",
+        "foreground": "#433c35",
+        "accent": "#aa5139",
+        "background": "#faf3df",
+        "opacity": 0.97,
+        "radius": 3,
+        "font": "serif",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 88,
+            "w": 580,
+            "h": 288,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 96,
+            "y": 392,
+            "w": 580,
+            "h": 504,
+            "size": 28,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 700,
+            "y": 120,
+            "w": 320,
+            "h": 264,
+            "size": 30,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "minimal",
+        "foreground": "#ffffff",
+        "accent": "#e4f0ca",
+        "background": "#15221d",
+        "opacity": 0,
+        "radius": 0,
+        "font": "geist",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 96,
+            "w": 760,
+            "h": 248,
+            "size": 52,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 96,
+            "y": 360,
+            "w": 560,
+            "h": 528,
+            "size": 30,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 96,
+            "y": 912,
+            "w": 760,
+            "h": 112,
+            "size": 28,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "minimal",
+        "foreground": "#ffffff",
+        "accent": "#e4f0ca",
+        "background": "#15221d",
+        "opacity": 0,
+        "radius": 0,
+        "font": "geist",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 96,
+            "w": 760,
+            "h": 248,
+            "size": 52,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 96,
+            "y": 360,
+            "w": 560,
+            "h": 528,
+            "size": 30,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 96,
+            "y": 912,
+            "w": 760,
+            "h": 112,
+            "size": 28,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "card",
+        "foreground": "#ffffff",
+        "accent": "#dfc3f9",
+        "background": "#211b32",
+        "opacity": 0.93,
+        "radius": 28,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 88,
+            "w": 460,
+            "h": 580,
+            "size": 38,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 580,
+            "y": 88,
+            "w": 460,
+            "h": 580,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 96,
+            "y": 692,
+            "w": 460,
+            "h": 164,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "card",
+        "foreground": "#ffffff",
+        "accent": "#dfc3f9",
+        "background": "#211b32",
+        "opacity": 0.93,
+        "radius": 28,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 88,
+            "w": 460,
+            "h": 580,
+            "size": 38,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 580,
+            "y": 88,
+            "w": 460,
+            "h": 580,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 96,
+            "y": 692,
+            "w": 460,
+            "h": 164,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "vinyl",
+        "foreground": "#ffffff",
+        "accent": "#efca92",
+        "background": "#29241f",
+        "opacity": 0.94,
+        "radius": 18,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 88,
+            "w": 940,
+            "h": 336,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 96,
+            "y": 448,
+            "w": 520,
+            "h": 504,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 640,
+            "y": 448,
+            "w": 396,
+            "h": 208,
+            "size": 30,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "vinyl",
+        "foreground": "#ffffff",
+        "accent": "#efca92",
+        "background": "#29241f",
+        "opacity": 0.94,
+        "radius": 18,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 96,
+            "y": 88,
+            "w": 940,
+            "h": 336,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 96,
+            "y": 448,
+            "w": 520,
+            "h": 504,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 640,
+            "y": 448,
+            "w": 396,
+            "h": 208,
+            "size": 30,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "signal",
+        "foreground": "#ffffff",
+        "accent": "#8ee3dd",
+        "background": "#10282b",
+        "opacity": 0.92,
+        "radius": 16,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 80,
+            "y": 836,
+            "w": 1100,
+            "h": 164,
+            "size": 38,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 80,
+            "y": 216,
+            "w": 560,
+            "h": 580,
+            "size": 28,
+            "label": "Song List",
+            "visible": false,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 1196,
+            "y": 836,
+            "w": 644,
+            "h": 164,
+            "size": 30,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 1920,
+      "height": 1080,
+      "lyric": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 1080,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "signal",
+        "foreground": "#ffffff",
+        "accent": "#8ee3dd",
+        "background": "#10282b",
+        "opacity": 0.92,
+        "radius": 16,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 88,
+          "w": 640,
+          "h": 840,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 80,
+            "y": 836,
+            "w": 1100,
+            "h": 164,
+            "size": 38,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 80,
+            "y": 216,
+            "w": 560,
+            "h": 580,
+            "size": 28,
+            "label": "Song List",
+            "visible": false,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 1196,
+            "y": 836,
+            "w": 644,
+            "h": 164,
+            "size": 30,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "version": 1,
+      "width": 1080,
+      "height": 1920,
+      "lyric": {
+        "x": 99,
+        "y": 88,
+        "w": 400,
+        "h": 220,
+        "visible": false
+      },
+      "lyricCompact": {
+        "w": 920,
+        "h": 100,
+        "autoFit": false
+      },
+      "playlist": {
+        "layout": "unified",
+        "group": {
+          "x": 9,
+          "y": 8,
+          "w": 500,
+          "h": 900
+        },
+        "autoScroll": true,
+        "scrollSpeed": 57,
+        "scrollPause": 0,
+        "blocks": {
+          "current": {
+            "size": 81,
+            "label": "日本語",
+            "align": "right",
+            "bold": true
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 1080,
+      "height": 1920,
+      "lyric": {
+        "x": 99,
+        "y": 88,
+        "w": 400,
+        "h": 220,
+        "visible": false
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 800,
+        "w": 920,
+        "h": 100,
+        "visible": true,
+        "autoFit": false
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 0.72,
+        "radius": 22,
+        "font": "system",
+        "limit": 8,
+        "listMode": "all",
+        "numbering": true,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "unified",
+        "group": {
+          "x": 9,
+          "y": 8,
+          "w": 500,
+          "h": 900,
+          "visible": true
+        },
+        "autoScroll": true,
+        "scrollSpeed": 57,
+        "scrollPause": 0,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 88,
+            "w": 640,
+            "h": 280,
+            "size": 81,
+            "label": "日本語",
+            "visible": true,
+            "align": "right",
+            "bold": true
+          },
+          "list": {
+            "x": 88,
+            "y": 384,
+            "w": 440,
+            "h": 528,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 384,
+            "w": 360,
+            "h": 208,
+            "size": 29,
+            "label": "Next On",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "input": {
+      "width": 99999,
+      "height": -5,
+      "lyric": {
+        "x": 999999,
+        "y": -4,
+        "w": 1,
+        "h": 99999
+      },
+      "playlist": {
+        "theme": "unknown",
+        "opacity": 2,
+        "radius": -10,
+        "font": "bad",
+        "limit": 999,
+        "listMode": "bad",
+        "foreground": "javascript:x",
+        "numbering": false,
+        "blocks": {
+          "next": {
+            "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "align": "bad",
+            "size": 200
+          }
+        }
+      }
+    },
+    "expected": {
+      "version": 1,
+      "width": 3840,
+      "height": 240,
+      "lyric": {
+        "x": 3808,
+        "y": 0,
+        "w": 32,
+        "h": 240,
+        "visible": true
+      },
+      "lyricCompact": {
+        "x": 160,
+        "y": 0,
+        "w": 1600,
+        "h": 240,
+        "visible": true,
+        "autoFit": true
+      },
+      "playlist": {
+        "theme": "glass",
+        "foreground": "#ffffff",
+        "accent": "#b9dcc7",
+        "background": "#15221d",
+        "opacity": 1,
+        "radius": 0,
+        "font": "system",
+        "limit": 20,
+        "listMode": "all",
+        "numbering": false,
+        "progress": true,
+        "hideIdle": false,
+        "layout": "separate",
+        "group": {
+          "x": 88,
+          "y": 0,
+          "w": 640,
+          "h": 240,
+          "visible": true
+        },
+        "autoScroll": false,
+        "scrollSpeed": 24,
+        "scrollPause": 2,
+        "blocks": {
+          "current": {
+            "x": 88,
+            "y": 0,
+            "w": 640,
+            "h": 240,
+            "size": 42,
+            "label": "Now Singing",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "list": {
+            "x": 88,
+            "y": 0,
+            "w": 440,
+            "h": 240,
+            "size": 27,
+            "label": "Song List",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          },
+          "next": {
+            "x": 544,
+            "y": 32,
+            "w": 360,
+            "h": 208,
+            "size": 96,
+            "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "visible": true,
+            "align": "left",
+            "bold": false
+          }
+        }
+      }
+    }
+  }
+]

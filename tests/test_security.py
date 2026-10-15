@@ -244,7 +244,7 @@ def test_json_errors_and_size_limit(client):
     for body in ('{"time":NaN}', '[]', '{', '{"time":Infinity}'):
         assert client.post(endpoint, content=body, headers={"Content-Type": "application/json"}).status_code == 400
     assert client.post(endpoint, content='x'*(server.MAX_BODY+1), headers={"Content-Type": "application/json"}).status_code == 413
-    chunks = iter([b'x'*131072, b'x'*131072, b'x'])
+    chunks = iter([b'x' * (server.MAX_BODY // 2), b'x' * (server.MAX_BODY - server.MAX_BODY // 2), b'x'])
     assert client.post(endpoint, content=chunks, headers={"Content-Type": "application/json"}).status_code == 413
 
 
@@ -271,11 +271,18 @@ def test_static_files_are_allowlisted_and_headers_present(client, tmp_path, monk
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["cache-control"] == "no-store"
     assert "default-src 'none'" in response.headers["content-security-policy"]
-    assert "unsafe-eval" not in response.headers["content-security-policy"]
+    assert "'unsafe-eval'" not in response.headers["content-security-policy"]
     assert response.headers["strict-transport-security"] == "max-age=31536000"
     open_session(client)
-    assert "unsafe-eval" not in client.get("/manokara.html").headers["content-security-policy"]
-    assert "'sha256-" in client.get("/manokara.html").headers["content-security-policy"]
+    assert "'unsafe-eval'" not in client.get("/manokara.html").headers["content-security-policy"]
+    # The React entry is an external bundle; the controller no longer needs an
+    # inline script hash. Its policy must still reject inline scripts and eval.
+    policy = client.get("/manokara.html").headers["content-security-policy"]
+    script_policy = next(part.strip() for part in policy.split(';') if part.strip().startswith('script-src '))
+    assert "'self'" in script_policy and "'unsafe-inline'" not in script_policy
+    assert '<script type="module" src="./manokara-react.js"></script>' in response.text
+    assert client.get('/manokara-react.js').status_code == 200
+    assert client.get('/src/manokara-controller.js').status_code == 404
     assert "'unsafe-eval'" in client.get("/manokara-folia.html").headers["content-security-policy"]
     # Test a symlink directly without changing the project's public files.
     target = tmp_path / "secret.txt"
@@ -285,7 +292,8 @@ def test_static_files_are_allowlisted_and_headers_present(client, tmp_path, monk
         link.symlink_to(target)
     except OSError:
         pytest.skip("Symlink creation requires elevated Windows privileges.")
-    monkeypatch.setattr(server, "ROOT", tmp_path)
+    from server.security import assets
+    monkeypatch.setattr(assets, "ROOT", tmp_path)
     assert not server.safe_asset(link)
 
 
@@ -296,18 +304,19 @@ def test_new_browser_allocations_are_rate_limited(client, app):
         client.cookies.clear()
     response = client.post("/__session", json={})
     assert response.status_code == 429
-    assert response.headers["retry-after"] == "15"
+    assert response.headers["retry-after"] == "6"
     assert app.state.store.db.execute("SELECT count(*) FROM sessions").fetchone()[0] == 10
 
 
 def test_room_and_session_storage_limits_keep_existing_visitors_working(client, app, monkeypatch):
-    monkeypatch.setattr(server, "MAX_ROOMS_PER_BROWSER", 1)
+    from server.repositories import rooms as repository
+    monkeypatch.setattr(repository, "MAX_ROOMS_PER_BROWSER", 1)
     open_session(client)
     info = room(client)
     assert client.post("/__room", json={}).status_code == 409
     assert client.post("/__room", json={"room": info["room"]}).json() == info
-    monkeypatch.setattr(server, "MAX_ROOMS", 1)
-    monkeypatch.setattr(server, "MAX_SESSIONS", 2)
+    monkeypatch.setattr(repository, "MAX_ROOMS", 1)
+    monkeypatch.setattr(repository, "MAX_SESSIONS", 2)
     client.cookies.clear()
     open_session(client)
     second_cookie = client.cookies.get("__Host-manokara_session")
@@ -460,3 +469,16 @@ def test_public_hashed_bundles_cache_but_private_state_does_not(client):
     assert client.get('/manokara-obs.html').headers['cache-control'] == 'no-store'
     assert client.get('/folia-assets/missing.js').headers['cache-control'] == 'no-store'
     assert client.get('/sources/FOLIA-INTEGRATION-SOURCE/ObsWebSourceApp.tsx').status_code == 200
+
+
+def test_tab_audio_assets_have_scoped_capture_and_wasm_policy(client):
+    capture = client.get('/manokara-tab-audio.html')
+    assert capture.status_code == 200
+    policy = capture.headers['content-security-policy']
+    assert "'wasm-unsafe-eval'" in policy
+    assert "'unsafe-eval'" not in policy
+    assert 'display-capture=(self)' in capture.headers['permissions-policy']
+    assert 'microphone=()' in capture.headers['permissions-policy']
+    for name in ('manokara-tab-audio.js', 'manokara-tab-audio.css'):
+        assert client.get('/' + name).status_code == 200
+    assert 'display-capture=()' in client.get('/manokara-obs.html').headers['permissions-policy']

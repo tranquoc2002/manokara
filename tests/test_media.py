@@ -215,7 +215,8 @@ def test_stream_limits_and_invalid_start_do_not_launch_processes():
     asyncio.run(run())
 
 
-def test_media_head_returns_video_headers_without_launching_a_process(tmp_path, monkeypatch):
+@pytest.mark.parametrize("kind,content_type", [("video", "video/mp4"), ("audio", "audio/mp4")])
+def test_media_head_returns_media_headers_without_launching_a_process(tmp_path, monkeypatch, kind, content_type):
     monkeypatch.setenv("MANOKARA_YTDLP_ENABLED", "0")
     app = backend.create_app(backend.Settings(ORIGIN, tmp_path))
     with TestClient(app, base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
@@ -224,8 +225,34 @@ def test_media_head_returns_video_headers_without_launching_a_process(tmp_path, 
         digest = app.state.store.session(client.cookies[app.state.settings.cookie])
         ticket = "a" * 32
         app.state.media.tickets[ticket] = {"room": room, "digest": digest, "expires": time.monotonic() + 60}
-        response = client.head(f"/__youtube/media?room={room}&ticket={ticket}")
+        response = client.head(f"/__youtube/media?room={room}&ticket={ticket}&kind={kind}")
         assert response.status_code == 200 and response.content == b""
-        assert response.headers["content-type"] == "video/mp4"
+        assert response.headers["content-type"] == content_type
         assert response.headers["cache-control"] == "no-store"
         assert not app.state.media.processes
+        assert client.get(f"/__youtube/media?room={room}&ticket={ticket}&kind=invalid").status_code == 400
+
+
+def test_pitch_stream_selects_only_audio_and_preserves_video_ticket_metadata(monkeypatch):
+    async def run():
+        service = media.MediaService(media.MediaSettings(enabled=True))
+        chosen = media.select_formats(metadata(), VIDEO)
+        service.tickets["token"] = {"room": "room", "digest": "visitor", "expires": time.monotonic() + 60, "metadata": chosen}
+        calls = []
+        spawn = service.spawn
+        async def capture(args):
+            calls.append(args)
+            return await spawn([sys.executable, "-c", "import sys,time;sys.stdin.read();sys.stdout.buffer.write(b'x'*16384);sys.stdout.buffer.flush();time.sleep(30)"])
+        monkeypatch.setattr(service, "spawn", capture)
+        process, initial = await service.open("token", "room", "visitor", 95, audio_only=True)
+        args = calls[0]
+        assert args[args.index("-f") + 1] == "234"
+        assert any(value.startswith("ffmpeg_o:-vn ") for value in args)
+        assert "*95-213" in args
+        assert [format["format_id"] for format in chosen["formats"]] == ["232", "234"]
+        response = media.MediaResponse(service, process, initial, "visitor", lambda: True, audio_only=True)
+        assert response.media_type == "audio/mp4"
+        assert await anext(response.body_iterator) == initial
+        await response.body_iterator.aclose()
+        assert not service.processes and not service.active
+    asyncio.run(run())
