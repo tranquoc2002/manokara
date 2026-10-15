@@ -8,7 +8,7 @@ Tìm nhạc, chuẩn bị lời và đưa overlay lên OBS cho buổi hát hoặ
 
 - **Tìm nhạc YouTube** ngay trên web hoặc dán link để thêm bài.
 - **Setlist và kho bài hát riêng**, lưu lời đã căn, tự chuyển bài kèm countdown.
-- **Tìm lời từ LRCLIB, NetEase, AMLL TTML**, ưu tiên bản có timecode; hỗ trợ nhập LRC/TTML và chỉnh khớp lời.
+- **Tìm lời từ LRCLIB, NetEase, Zing MP3, QQ Music, AMLL TTML**, hỗ trợ timecode từng dòng/từng từ, nhập LRC/TTML và chỉnh khớp lời.
 - **Chuyển lời tiếng Nhật sang romaji**, giữ nguyên timecode và cho phép sửa cách đọc.
 - **Lyric motion từ JIZURA, Folia và karaoke cổ điển**, tùy chỉnh hiển thị và lưu animation riêng cho từng bài.
 - **Overlay Studio cho lyric và playlist**, chỉnh bố cục trên web, nền trong suốt và chừa vùng giữa cho camera/model.

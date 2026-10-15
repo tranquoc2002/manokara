@@ -10,21 +10,22 @@ from urllib.parse import urlsplit
 import httpx
 from starlette.exceptions import HTTPException
 
-from ..schemas.lyrics import PROVIDER_LABELS, normalize_result, rank_results
-from .lyric_providers import ADAPTERS, ProviderError
+from ..schemas.lyrics import PROVIDER_LABELS, has_timecodes, normalize_result, rank_results
+from .lyric_providers import ADAPTERS, ProviderError, ZING_API_PATHS, ZING_LYRIC_HOST, zing_lyric_file, zing_params
 from .amll import AmllProvider
 
 MAX_CACHE_BYTES = 8 * 1024 * 1024
 MAX_RESULT_BYTES = 1000000
 USER_AGENT = "Manokara/1.0 (+https://github.com/tranquoc2002/manokara)"
 HOSTS = {"lrclib": "lrclib.net", "netease": "music.163.com",
-         "amll": "raw.githubusercontent.com", "musixmatch": "api.musixmatch.com"}
+         "qq": "api.betterlyrics.org", "zing": "zingmp3.vn", "amll": "raw.githubusercontent.com", "musixmatch": "api.musixmatch.com"}
 
 
 @dataclass(frozen=True)
 class LyricsSettings:
     providers: tuple = tuple(PROVIDER_LABELS)
     musixmatch_key: str = field(default="", repr=False)
+    betterlyrics_key: str = field(default="", repr=False)
 
     @classmethod
     def from_env(cls):
@@ -33,11 +34,13 @@ class LyricsSettings:
         # Old private start scripts may still list the retired provider; ignore it on upgrade.
         providers = tuple(value for value in providers if value != "megalobiz")
         if any(value not in PROVIDER_LABELS for value in providers):
-            raise ValueError("MANOKARA_LYRIC_PROVIDERS accepts lrclib,netease,amll,musixmatch.")
+            raise ValueError("MANOKARA_LYRIC_PROVIDERS accepts lrclib,netease,qq,zing,amll,musixmatch.")
         key = os.environ.get("MANOKARA_MUSIXMATCH_API_KEY", "").strip()
-        if len(key) > 512 or any(ord(char) < 33 or ord(char) > 126 for char in key):
-            raise ValueError("Lyric provider API keys must be printable ASCII without spaces.")
-        return cls(providers, key)
+        qq_key = os.environ.get("MANOKARA_BETTER_LYRICS_API_KEY", "").strip()
+        for secret in (key, qq_key):
+            if len(secret) > 512 or any(ord(char) < 33 or ord(char) > 126 for char in secret):
+                raise ValueError("Lyric provider API keys must be printable ASCII without spaces.")
+        return cls(providers, key, qq_key)
 
 
 class LyricsService:
@@ -56,7 +59,8 @@ class LyricsService:
         return [{"id": provider, "label": label,
                  "enabled": provider in self.settings.providers and (provider != "musixmatch" or bool(self.settings.musixmatch_key)),
                  "reason": "disabled" if provider not in self.settings.providers else
-                           "needs_key" if provider == "musixmatch" and not self.settings.musixmatch_key else ""}
+                           "needs_key" if provider == "musixmatch" and not self.settings.musixmatch_key else
+                           "cache_only" if provider == "qq" and not self.settings.betterlyrics_key else ""}
                 for provider, label in PROVIDER_LABELS.items()]
 
     def cached(self, key):
@@ -94,14 +98,27 @@ class LyricsService:
         if tokens < 1:
             raise ProviderError("limited")
 
-    async def get(self, provider, url, params, *, cache=False, cache_ttl=300, as_text=False, max_bytes=3 * 1024 * 1024):
+    async def get(self, provider, url, params, *, method="GET", cache=False, cache_ttl=300, as_text=False, max_bytes=3 * 1024 * 1024):
         # All adapters have fixed, allowlisted targets. Upstream source links are display-only.
         parsed = urlsplit(url)
-        if parsed.scheme != "https" or parsed.netloc != HOSTS[provider]:
+        hosts = {HOSTS[provider], ZING_LYRIC_HOST} if provider == "zing" else {HOSTS[provider]}
+        if parsed.scheme != "https" or parsed.netloc not in hosts:
             raise ProviderError("invalid")
         if provider == "amll" and not parsed.path.startswith("/amll-dev/amll-ttml-db/main/"):
             raise ProviderError("invalid")
-        key = ("detail", provider, url, tuple(sorted(params.items())))
+        if provider == "qq" and parsed.path != "/qq/getLyrics":
+            raise ProviderError("invalid")
+        if provider == "zing":
+            if parsed.query or parsed.fragment:
+                raise ProviderError("invalid")
+            if parsed.netloc == ZING_LYRIC_HOST:
+                if not as_text or params or not zing_lyric_file(url):
+                    raise ProviderError("invalid")
+            elif not (parsed.path == "/" and as_text and not params or parsed.path in ZING_API_PATHS and not as_text):
+                raise ProviderError("invalid")
+        if method not in ("GET", "POST") or method == "POST" and (provider != "netease" or parsed.path != "/api/search/get"):
+            raise ProviderError("invalid")
+        key = ("detail", provider, method, url, tuple(sorted(params.items())))
         previous = self.cached(key) if cache else None
         if previous is not None:
             return previous
@@ -110,8 +127,24 @@ class LyricsService:
         params = dict(params)
         if provider == "netease":
             headers["Referer"] = "https://music.163.com/"
+            # A shared upstream visitor cookie (NMTID) can cause later anonymous
+            # searches to return unrelated songs. Keep requests stateless even
+            # when HTTPX's connection pool has retained upstream Set-Cookie data.
+            headers["Cookie"] = ""
         elif provider == "musixmatch":
             params["apikey"] = self.settings.musixmatch_key
+        elif provider == "qq":
+            headers["Cookie"] = ""
+            if self.settings.betterlyrics_key:
+                headers["X-API-Key"] = self.settings.betterlyrics_key
+        elif provider == "zing":
+            headers["Referer"] = "https://zingmp3.vn/"
+            if parsed.path in ZING_API_PATHS:
+                # Generate fresh signatures only for outbound requests. Volatile
+                # ctime/sig must not defeat the shared detail/search cache.
+                params = zing_params(parsed.path, params)
+            elif parsed.netloc == ZING_LYRIC_HOST:
+                headers["Cookie"] = ""
         if self.closed:
             raise ProviderError()
         if self.client is None:
@@ -119,7 +152,8 @@ class LyricsService:
                                             limits=httpx.Limits(max_connections=12, max_keepalive_connections=6),
                                             headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
         async with asyncio.timeout(5):
-            async with self.client.stream("GET", url, params=params, headers=headers) as response:
+            request = {"params": params} if method == "GET" else {"data": params}
+            async with self.client.stream(method, url, headers=headers, **request) as response:
                 if response.status_code == 429:
                     try:
                         retry = max(15, min(86400, float(response.headers.get("Retry-After", "60"))))
@@ -128,7 +162,13 @@ class LyricsService:
                     self.cooldown[provider] = (time.monotonic() + retry, "limited")
                     raise ProviderError("limited")
                 if response.status_code in (401, 403):
-                    raise ProviderError("credentials" if provider == "musixmatch" else "restricted")
+                    if provider == "qq" and response.status_code == 401 and not self.settings.betterlyrics_key:
+                        # A cache miss needs a key, but other cached QQ queries can
+                        # still work. Do not put the whole provider into cooldown.
+                        raise ProviderError("needs_key")
+                    raise ProviderError("credentials" if provider in ("musixmatch", "qq") else "restricted")
+                if provider == "qq" and response.status_code == 404:
+                    raise ProviderError("empty")
                 if response.status_code != 200:
                     raise ProviderError()
                 content = bytearray()
@@ -141,6 +181,18 @@ class LyricsService:
         except (ValueError, RecursionError):
             raise ProviderError("invalid") from None
         cacheable = True
+        if provider == "qq":
+            cacheable = isinstance(value, dict) and value.get("provider") == "qq" and isinstance(value.get("lyrics"), str) and bool(value["lyrics"].strip())
+        if provider == "zing":
+            if parsed.netloc == ZING_LYRIC_HOST:
+                if not isinstance(value, str) or not has_timecodes(value):
+                    raise ProviderError("invalid")
+            elif parsed.path in ZING_API_PATHS:
+                # Business errors can arrive with HTTP 200. Retain only actual
+                # catalog/lyric data, so a temporary denial cannot poison cache.
+                data = value.get("data") if isinstance(value, dict) and type(value.get("err")) is int and value["err"] == 0 else None
+                cacheable = isinstance(data, dict) and bool(data.get("songs") if parsed.path == "/api/v2/search/multi" else
+                                                          data.get("sentences") or data.get("file") or data.get("lyric"))
         if provider == "netease":
             # NetEase can return verification/errors inside an HTTP 200 response.
             # Never retain those responses as lyric or search details.
@@ -148,9 +200,9 @@ class LyricsService:
             if cacheable and parsed.path == "/api/search/get":
                 result = value.get("result")
                 cacheable = isinstance(result, dict) and isinstance(result.get("songs"), list) and bool(result["songs"])
-            elif cacheable and parsed.path == "/api/song/lyric":
-                lrc = value.get("lrc")
-                cacheable = isinstance(lrc, dict) and isinstance(lrc.get("lyric"), str) and bool(lrc["lyric"].strip())
+            elif cacheable and parsed.path in ("/api/song/lyric", "/api/song/lyric/v1"):
+                cacheable = any(isinstance(value.get(key), dict) and isinstance(value[key].get("lyric"), str)
+                                and bool(value[key]["lyric"].strip()) for key in ("lrc", "yrc"))
         if cache and cacheable:
             self.remember(key, value, cache_ttl)
         return value

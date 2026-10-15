@@ -29,6 +29,7 @@ export function SongEditorShell({
   const providers = search.providers?.length ? search.providers : LYRIC_PROVIDERS;
   const sources = readLyricSources(draft.lyricSources);
   const t = value => window.ManokaraI18n?.text(value) || value;
+  const providerHint = itemSource => !itemSource.enabled ? t(itemSource.reason === 'needs_key' ? 'Needs server API key' : 'Disabled on server') : itemSource.reason === 'cache_only' ? t('Cached songs only') : '';
   const icon = name => <svg className="icon" aria-hidden="true"><use href={`./manokara-icons.svg#${name}`} /></svg>;
   return <>    <div className="studio-dialog-head">      <div><span className="eyebrow">Manokara</span><h2 id="songDialogTitle">{view.title}</h2></div>      <button className="ghost icon-button" id="closeSongEditor" type="button" aria-label="Close song editor" onClick={() => document.getElementById('songEditorDialog')?.close()}>{icon('x')}</button>    </div>    <div id="songEditorMount">      <section className="tabpanel" id="panel-song" role="region" aria-labelledby="songDialogTitle">        <div className="panel-intro"><div><h2 id="ftitle">{view.title}</h2><p>A karaoke link, a few lyrics, and you're ready.</p></div></div>        <div className="field-grid">          <label className="field"><span>Karaoke link</span><input id="url" type="url" placeholder="Paste a YouTube or media URL" autoComplete="off" value={draft.url} onChange={event => {
               appRuntime.draft.set('url', event.currentTarget.value);
@@ -50,7 +51,7 @@ export function SongEditorShell({
             <label htmlFor="lyricProvider">{t('Source')}<select id="lyricProvider" value={draft.lyricProvider} onChange={event => {
               appRuntime.draft.set('lyricProvider', event.currentTarget.value);
               appRuntime.commands.actions('editor')?.clearLyricSearch();
-            }}><option value="auto">{t('All sources')}</option>{providers.map(itemSource => <option key={itemSource.id} value={itemSource.id} disabled={!itemSource.enabled}>{itemSource.label}{!itemSource.enabled ? ` · ${t(itemSource.reason === 'needs_key' ? 'Needs server API key' : 'Disabled on server')}` : ''}</option>)}</select></label>
+            }}><option value="auto">{t('All sources')}</option>{providers.map(itemSource => <option key={itemSource.id} value={itemSource.id} disabled={!itemSource.enabled}>{itemSource.label}{providerHint(itemSource) ? ` · ${providerHint(itemSource)}` : ''}</option>)}</select></label>
             <small>{t('Timed lyrics first, regardless of source.')}</small>
           </div>
           <p id="lyricLoadStatus" className="lyric-load-status" role="status" aria-live="polite" hidden={!draft.lyricLoadStatus}>{draft.lyricLoadStatus}</p>

@@ -6,11 +6,13 @@ import re
 import unicodedata
 from urllib.parse import urlsplit
 
-PROVIDER_LABELS = {"lrclib": "LRCLIB", "netease": "NetEase", "amll": "AMLL TTML", "musixmatch": "Musixmatch"}
+PROVIDER_LABELS = {"lrclib": "LRCLIB", "netease": "NetEase", "qq": "QQ Music · Better Lyrics", "zing": "Zing MP3", "amll": "AMLL TTML", "musixmatch": "Musixmatch"}
 SOURCE_HOSTS = {
     "lrclib": {"lrclib.net"}, "netease": {"music.163.com"},
     "musixmatch": {"musixmatch.com", "www.musixmatch.com"},
     "amll": {"github.com"},
+    "qq": {"y.qq.com"},
+    "zing": {"zingmp3.vn"},
 }
 TIMESTAMP = re.compile(r"\[\d{1,3}:[0-5]\d(?:[.:]\d{1,3})?\]")
 METADATA = re.compile(r"^\[(?:ar|ti|al|by|re|ve|length|id):.*\]\s*$", re.I)
@@ -78,8 +80,8 @@ def normalize_result(provider, row):
             "syncedLyrics": synced or None, "plainLyrics": plain or None, "sources": [source],
             "copyright": text(row.get("copyright"), 2000),
             "wordTimed": bool(synced and (row.get("wordTimed") if type(row.get("wordTimed")) is bool else re.search(r"<\d{1,3}:\d{2}(?:\.\d+)?>[^<\r\n]+", synced))),
-            "format": "ttml" if row.get("format") == "ttml" else "lrc",
-            "warnings": [value for value in row.get("warnings", []) if value in ("background", "auxiliary", "overlap", "reserved_characters")][:4] if isinstance(row.get("warnings"), list) else []}
+            "format": row["format"] if row.get("format") in ("ttml", "yrc", "qrc") else "lrc",
+            "warnings": [value for value in row.get("warnings", []) if value in ("background", "auxiliary", "overlap", "reserved_characters", "word_timing_unavailable")][:5] if isinstance(row.get("warnings"), list) else []}
 
 
 def fold(value):

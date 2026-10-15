@@ -9,7 +9,7 @@ import { createTabAudio } from './services/tab-audio.js';
 import { persistence } from './services/persistence.mjs';
 import { LYRIC_STYLE_FIELDS, normalizeLyricStyle as normalizePersistedStyle } from './domain/lyric-appearance.mjs';
 import { createRelayPacket } from './domain/relay-packet.mjs';
-import { LYRIC_PROVIDERS, LYRIC_SOURCE_STATUSES, readProviderCatalog, readLyricResults, readLyricSources, safeLyricSourceUrl, ttmlImportNotice } from './services/lyric-search.mjs';
+import { LYRIC_PROVIDERS, LYRIC_SOURCE_STATUSES, readProviderCatalog, readLyricResults, readLyricSources, safeLyricSourceUrl, lyricImportNotice } from './services/lyric-search.mjs';
 export function initManokaraController() {
   if (window.ManokaraController?.active) return window.ManokaraController;
   const uiText = ManokaraI18n.text,
@@ -184,7 +184,7 @@ export function initManokaraController() {
     imported(metadata, _filename, ttml) {
       draft.patch({ lyricSourceLabel: '', lyricSourceUrl: '', lyricCopyright: '', lyricSources: '[]', lyricLoadStatus: '' });
       if (ttml) {
-        draft.patch({ lyricSourceLabel: 'TTML file', lyricCopyright: ttml.copyright || '', lyricLoadStatus: ttmlImportNotice(ttml.warnings, uiText) });
+        draft.patch({ lyricSourceLabel: 'TTML file', lyricCopyright: ttml.copyright || '', lyricLoadStatus: lyricImportNotice(ttml.warnings, uiText) });
       }
       pickDur = metadata.duration;
       if (!draft.get("ttl") && metadata.title) draft.set("ttl", metadata.title.slice(0, 512));
@@ -857,7 +857,7 @@ export function initManokaraController() {
   function renderSearchResults() {
     const results = searchState === 'results' ? res.map(x => ({
       title: (x.trackName + ' — ' + x.artistName).slice(0, 700),
-      kind: uiText(x.wordTimed ? 'Word-timed lyrics' : x.syncedLyrics ? 'Timed lyrics' : 'Plain lyrics') + (x.format === 'ttml' ? ' · TTML' : ''),
+      kind: uiText(x.wordTimed ? 'Word-timed lyrics' : x.syncedLyrics ? 'Timed lyrics' : 'Plain lyrics') + (['ttml', 'yrc', 'qrc'].includes(x.format) ? ' · ' + x.format.toUpperCase() : ''),
       timed: !!x.syncedLyrics,
       sources: x.sources.map(source => ({ label: source.label, url: safeLyricSourceUrl(source.url) })),
       duration: x.duration ? fmt(x.duration) : '—'
@@ -950,7 +950,7 @@ export function initManokaraController() {
     lyricEditor.sourceReplaced();
     pickDur = x.duration;
     const timed = !!x.syncedLyrics;
-    draft.set("lyricLoadStatus", [uiText(timed ? 'Timed lyrics loaded. Save the song to keep them.' : 'Plain lyrics loaded. Save the song to keep them.'), ttmlImportNotice(x.warnings, uiText)].filter(Boolean).join(' '));
+    draft.set("lyricLoadStatus", [uiText(timed ? 'Timed lyrics loaded. Save the song to keep them.' : 'Plain lyrics loaded. Save the song to keep them.'), lyricImportNotice(x.warnings, uiText)].filter(Boolean).join(' '));
     searchState = '';
     res = [];
     renderSearchResults();
