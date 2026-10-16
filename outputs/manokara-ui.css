@@ -1168,13 +1168,16 @@ textarea {
 }
 
 .library-dialog {
-  width: min(680px,calc(100vw - 32px))
+  width: min(1120px,calc(100vw - 32px));
+  height: min(800px,90dvh)
 }
 
 .library-content {
+  display: flex;
+  flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 18px 22px 24px
+  overflow: hidden;
+  padding: 0
 }
 
 .library-content>p {
@@ -1182,7 +1185,7 @@ textarea {
 }
 
 .library-content .field {
-  margin-bottom: 12px
+  margin-bottom: 0
 }
 
 .library-empty {
@@ -1233,6 +1236,85 @@ textarea {
   display: flex;
   flex: none;
   gap: 5px
+}
+
+/* Named playlists live inside the library, separate from the active show setlist. */
+#libraryReactRoot { display:flex; flex:1; min-width:0; min-height:0 }
+.library-workspace { display:grid; grid-template-columns:220px minmax(0,1fr); flex:1; min-height:0; min-width:0 }
+.library-sidebar { display:flex; flex-direction:column; gap:8px; min-width:0; min-height:0; padding:20px 14px; border-right:1px solid var(--line); background:var(--input) }
+.library-sidebar-head h3 { margin:0 8px 10px; color:var(--mu); font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase }
+.library-folder { display:flex; align-items:center; gap:9px; width:100%; min-height:42px; padding:9px 10px; text-align:left; border:1px solid transparent; background:transparent; color:var(--fg); border-radius:10px }
+.library-folder[aria-pressed="true"] { background:var(--soft); border-color:var(--ac) }
+.library-folder .icon { flex:none; color:var(--ac) }
+.library-folder span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.library-folder small { color:var(--mu); font-size:11px; flex:none }
+.library-folders { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:5px; padding-block:4px }
+.library-sidebar-hint { margin:10px; color:var(--mu); font-size:12px; line-height:1.7 }
+.library-create { flex:none; justify-content:center; margin-top:8px; border:1px dashed var(--line) }
+.library-main { display:flex; flex-direction:column; gap:12px; min-width:0; min-height:0; padding:20px 22px; overflow:hidden }
+.library-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; flex:none }
+.library-heading-copy { min-width:0; flex:1 }
+.library-heading h3 { display:flex; align-items:baseline; gap:10px; margin:5px 0 0; font-size:19px; overflow-wrap:anywhere }
+.library-heading h3 small { flex:none; font-size:12px; color:var(--mu); font-weight:400 }
+.library-heading-actions,.library-selection-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-width:0 }
+.library-heading-actions .icon-button,.library-song-actions .icon-button { width:36px; height:36px; padding:7px; flex:none }
+.library-danger { color:var(--danger) }
+.library-name-form { display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--soft); flex:none }
+.library-name-form .field { flex:1 1 200px; min-width:0 }
+.library-name-form>div { display:flex; gap:6px }
+.library-name-hint { flex-basis:100%; font-size:11px }
+.library-name-form input { width:100%; min-width:0 }
+.library-content .library-search { display:flex; align-items:center; gap:8px; padding-inline:12px; background:var(--input); border:1px solid var(--line); border-radius:10px; flex:none }
+.library-search .icon { color:var(--mu); flex:none }
+.library-search input { width:100%; min-width:0; border:0; background:transparent; box-shadow:none }
+.library-search:focus-within { outline:2px solid var(--ac); outline-offset:2px }
+.library-search .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap }
+.library-selection { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; flex:none }
+.library-select-all { display:flex; align-items:center; gap:8px; color:var(--mu); font-size:12px; min-height:36px }
+.library-workspace input[type="checkbox"] { width:17px; height:17px; margin:0; flex:none; accent-color:var(--ac) }
+.library-selection-actions select { min-width:0; max-width:180px; width:180px; text-overflow:ellipsis }
+.library-selection-actions button { padding:8px 10px; font-size:12px }
+.library-notice { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:20px; color:var(--mu); font-size:12px; flex:none }
+.library-notice-error { color:var(--danger) }
+.library-notice button { padding:4px 9px; flex:none }
+.library-main #libraryList { flex:1; min-height:0; max-height:none; align-content:start; overscroll-behavior:contain }
+.library-main #libraryList[hidden] { display:none }
+.library-main #libraryList li { display:grid; grid-template-columns:20px minmax(0,1fr) auto; gap:10px; padding:12px }
+.library-main #libraryList .library-song-selected { border-color:var(--ac); background:var(--soft) }
+.library-main .library-song-info { gap:5px }
+.library-main .library-song-info b { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; overflow-wrap:anywhere; font-size:13px; line-height:1.5 }
+.library-main .library-song-info small { font-size:11px; overflow-wrap:anywhere }
+.library-main .library-song-actions { align-items:center }
+.library-main .library-song-actions .s { padding:8px 10px; font-size:12px }
+.library-main .library-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; min-height:100px; line-height:1.7 }
+.library-empty>.icon { width:32px; height:32px; color:var(--ac); opacity:.75 }
+.library-empty p { margin:0; max-width:370px }
+
+@media (max-width:760px) {
+  .library-workspace { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) }
+  .library-sidebar { flex-flow:row wrap; align-items:center; gap:6px; padding:12px 14px; border-right:0; border-bottom:1px solid var(--line) }
+  .library-sidebar-head { flex:1 }
+  .library-sidebar-head h3 { margin:0 }
+  .library-sidebar>.library-folder { width:auto; max-width:50%; order:1 }
+  .library-create { margin:0; order:0; padding:8px 10px }
+  .library-folders { flex:1 1 100%; order:2; flex-direction:row; gap:6px; max-height:52px; min-height:0; overflow:auto }
+  .library-folders .library-folder { flex:0 0 auto; width:auto; max-width:220px }
+  .library-sidebar-hint { margin:0; font-size:11px; white-space:normal }
+  .library-main { padding:14px; overflow:auto }
+  .library-main #libraryList { flex:1 0 160px }
+  .library-main .library-empty { flex:1 0 130px }
+}
+@media (max-width:580px) {
+  .library-heading-actions { flex-basis:100% }
+  .library-main #libraryList li { grid-template-columns:20px minmax(0,1fr) }
+  .library-main .library-song-actions { grid-column:2; justify-content:flex-end }
+  .library-selection-actions { width:100% }
+  .library-selection-actions select { flex:1; max-width:none; width:100px }
+}
+@media (max-height:650px) {
+  .library-main { overflow:auto }
+  .library-main #libraryList { flex:1 0 140px }
+  .library-main .library-empty { flex:1 0 100px }
 }
 
 .setlist-head-actions {
@@ -2330,7 +2412,7 @@ kbd {
     padding: 16px
   }
   .library-content {
-    padding: 14px
+    padding: 0
   }
   #libraryList li {
     gap: 8px;

@@ -48,7 +48,12 @@ export function createInitialFeatureState() {
     },
     library: {
       songs: [],
-      labels: {}
+      labels: {},
+      playlists: [],
+      activePlaylistId: '',
+      busy: false,
+      status: '',
+      error: false
     },
     setlist: {
       songs: [],

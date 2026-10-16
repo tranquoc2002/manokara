@@ -41,10 +41,15 @@ export function createFeatureRuntime(initial = {}) {
     ...Object.fromEntries(['title', 'artist', 'url', 'libraryId', 'mc', 'memo', 'dur', 's', 'e', 'mediaDuration', 'lrc'].map(key => [key, song[key]]))
   })));
   const ui = {
-    updateLibrary(songs, labels) {
+    updateLibrary(songs, labels, details = {}) {
       stores.library.replace({
+        ...stores.library.getSnapshot(),
+        ...details,
         songs: rows(songs),
-        labels
+        labels,
+        playlists: Object.freeze((details.playlists || stores.library.getSnapshot().playlists || []).map(playlist => Object.freeze({
+          ...playlist, songIds: Object.freeze([...playlist.songIds])
+        })))
       });
     },
     updateSetlist(songs, current, labels, formatTime) {

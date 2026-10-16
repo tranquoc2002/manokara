@@ -7,7 +7,7 @@ Tìm nhạc, chuẩn bị lời và đưa overlay lên OBS cho buổi hát hoặ
 ## Manokara có gì?
 
 - **Tìm nhạc YouTube** ngay trên web hoặc dán link để thêm bài.
-- **Setlist và kho bài hát riêng**, lưu lời đã căn, tự chuyển bài kèm countdown.
+- **Setlist, kho bài hát và playlist tự đặt tên**, lưu lời đã căn, gom nhạc theo ngôn ngữ/mood, tự chuyển bài kèm countdown.
 - **Tìm lời từ LRCLIB, NetEase, Zing MP3, QQ Music, AMLL TTML**, hỗ trợ timecode từng dòng/từng từ, nhập LRC/TTML và chỉnh khớp lời.
 - **Chuyển lời tiếng Nhật sang romaji**, giữ nguyên timecode và cho phép sửa cách đọc.
 - **Lyric motion từ JIZURA, Folia và karaoke cổ điển**, tùy chỉnh hiển thị và lưu animation riêng cho từng bài.

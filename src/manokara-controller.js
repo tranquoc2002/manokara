@@ -7,6 +7,7 @@ import { lyricFonts } from './manokara-fonts.js';
 import { stagePreview } from './services/stage-preview.js';
 import { createTabAudio } from './services/tab-audio.js';
 import { persistence } from './services/persistence.mjs';
+import { copyPersistent } from './domain/song.mjs';
 import { LYRIC_STYLE_FIELDS, normalizeLyricStyle as normalizePersistedStyle } from './domain/lyric-appearance.mjs';
 import { createRelayPacket } from './domain/relay-packet.mjs';
 import { LYRIC_PROVIDERS, LYRIC_SOURCE_STATUSES, readProviderCatalog, readLyricResults, readLyricSources, safeLyricSourceUrl, lyricImportNotice } from './services/lyric-search.mjs';
@@ -206,8 +207,21 @@ export function initManokaraController() {
     }
   });
   runtime.own(() => lyricEditor.dispose());
-  let librarySongs = [],
-    libraryUnavailable = false;
+  let librarySongs = [], libraryPlaylists = [], activePlaylistId = '',
+    libraryUnavailable = false, playlistsUnavailable = false, libraryBusy = false,
+    libraryNotice = '', libraryNoticeError = false, libraryRefreshRevision = 0;
+  let libraryChannel = null;
+  try {
+    libraryChannel = new BroadcastChannel('manokara-library-v1');
+    runtime.listen(libraryChannel, 'message', event => {
+      if (event.data === 'changed') void refreshLibrary();
+    });
+    runtime.own(() => { libraryChannel?.close(); libraryChannel = null; });
+  } catch (_) {}
+  runtime.listen(window, 'focus', () => { if ($('#libraryDialog').open) void refreshLibrary(); });
+  function notifyLibraryChange() {
+    try { libraryChannel?.postMessage('changed'); } catch (_) {}
+  }
   const makeLibraryId = () => {
     try {
       return crypto.randomUUID();
@@ -216,8 +230,8 @@ export function initManokaraController() {
     }
   };
   const libraryAll = () => persistence.library.list();
-  const libraryPut = song => persistence.library.put(song);
-  const libraryDelete = id => persistence.library.remove(id);
+  const libraryPut = async song => { await persistence.library.put(song); notifyLibraryChange(); };
+  const libraryDelete = async id => { await persistence.library.remove(id); notifyLibraryChange(); };
   function renderLibrary() {
     const labels = {
       search: uiText('Search my songs'),
@@ -230,20 +244,118 @@ export function initManokaraController() {
       add: uiText('Add'),
       remove: uiText('Remove from My songs')
     };
-    appRuntime.ui.updateLibrary(librarySongs, labels);
+    appRuntime.ui.updateLibrary(librarySongs, labels, {
+      playlists: libraryPlaylists, activePlaylistId, busy: libraryBusy, playlistsUnavailable,
+      error: libraryNoticeError || libraryUnavailable || playlistsUnavailable,
+      status: uiText(libraryNotice || (libraryUnavailable ? 'Could not load My songs. Please try again.' :
+        playlistsUnavailable ? 'Could not load playlists. Your saved songs are still available.' : ''))
+    });
     updateSetlistView();
   }
   async function refreshLibrary() {
     if (runtime.disposed) return;
-    try {
-      librarySongs = (await libraryAll()).filter(song => song && typeof song.libraryId === 'string' && typeof song.url === 'string');
-      if (runtime.disposed) return;
-      libraryUnavailable = false;
-      renderLibrary();
-    } catch (error) {
-      libraryUnavailable = true;
-      updateSetlistView();
+    const revision = ++libraryRefreshRevision;
+    const [songs, playlists] = await Promise.allSettled([libraryAll(), persistence.playlists.list()]);
+    if (runtime.disposed || revision !== libraryRefreshRevision) return false;
+    libraryUnavailable = songs.status !== 'fulfilled';
+    playlistsUnavailable = playlists.status !== 'fulfilled';
+    if (!libraryUnavailable) librarySongs = songs.value;
+    if (!playlistsUnavailable) {
+      libraryPlaylists = playlists.value;
+      if (activePlaylistId && !libraryPlaylists.some(playlist => playlist.playlistId === activePlaylistId)) activePlaylistId = '';
     }
+    renderLibrary();
+    return !libraryUnavailable && !playlistsUnavailable;
+  }
+  async function changeLibrary(operation, success = '') {
+    if (runtime.disposed || libraryBusy) return false;
+    libraryBusy = true;
+    libraryNotice = '';
+    libraryNoticeError = false;
+    renderLibrary();
+    try {
+      const result = await operation();
+      notifyLibraryChange();
+      if (runtime.disposed) return false;
+      const refreshed = await refreshLibrary();
+      if (runtime.disposed) return false;
+      libraryNotice = refreshed ? (typeof result === 'string' ? result : success) : 'Changes saved, but My songs could not be refreshed. Try again.';
+      libraryNoticeError = !refreshed;
+      if (libraryNotice) msg(libraryNotice);
+      return true;
+    } catch (error) {
+      if (runtime.disposed) return false;
+      const known = ['Name your playlist (1–80 characters).', 'This playlist no longer exists.',
+        'Could not save the setlist. Nothing was added.', 'Could not save the setlist. The song was kept in My songs.'];
+      libraryNotice = known.includes(error.message) ? error.message : 'Could not update My songs or playlists. Please try again.';
+      libraryNoticeError = true;
+      msg(libraryNotice);
+      return false;
+    } finally {
+      libraryBusy = false;
+      if (!runtime.disposed) renderLibrary();
+    }
+  }
+  function selectLibraryPlaylist(id = '') {
+    if (libraryBusy) return;
+    activePlaylistId = libraryPlaylists.some(playlist => playlist.playlistId === id) ? id : '';
+    libraryNotice = '';
+    libraryNoticeError = false;
+    renderLibrary();
+  }
+  function createLibraryPlaylist(name, songIds = []) {
+    return changeLibrary(async () => {
+      const available = new Set((await libraryAll()).map(song => song.libraryId));
+      const playlist = await persistence.playlists.create(name, songIds.filter(id => available.has(id)));
+      activePlaylistId = playlist.playlistId;
+    }, 'Playlist created.');
+  }
+  function renameLibraryPlaylist(id, name) {
+    return changeLibrary(() => persistence.playlists.rename(id, name), 'Playlist renamed.');
+  }
+  function deleteLibraryPlaylist(id) {
+    if (libraryBusy || !libraryPlaylists.some(playlist => playlist.playlistId === id) ||
+        !confirm(uiText('Delete this playlist? Songs in My songs and the setlist will stay.'))) return false;
+    return changeLibrary(async () => {
+      await persistence.playlists.remove(id);
+      if (activePlaylistId === id) activePlaylistId = '';
+    }, 'Playlist deleted. Your songs are still in My songs.');
+  }
+  function addSongsToLibraryPlaylist(id, songIds) {
+    const wanted = new Set(songIds);
+    return changeLibrary(async () => {
+      const saved = new Set((await libraryAll()).map(song => song.libraryId));
+      const available = [...wanted].filter(id => saved.has(id));
+      if (!available.length) throw new Error('No saved songs selected');
+      await persistence.playlists.addSongs(id, available);
+    }, 'Songs added to playlist.');
+  }
+  function removeSongsFromLibraryPlaylist(id, songIds) {
+    return changeLibrary(() => persistence.playlists.removeSongs(id, songIds), 'Songs removed from playlist.');
+  }
+  function moveLibraryPlaylistSong(id, songId, direction, neighborId) {
+    return changeLibrary(() => persistence.playlists.moveSong(id, songId, direction, neighborId), 'Playlist order saved.');
+  }
+  async function appendLibrarySongs(songIds, success) {
+    const byId = new Map((await libraryAll()).map(song => [song.libraryId, song]));
+    if (runtime.disposed) return;
+    const existing = new Set(items.map(song => song.libraryId));
+    const additions = [...new Set(songIds)].filter(id => byId.has(id) && !existing.has(id))
+      .map(id => ({ ...copyPersistent(byId.get(id)), librarySync: true }));
+    if (!additions.length) return 'These songs are already in the setlist, or are no longer in My songs.';
+    const next = [...items, ...additions];
+    // Commit before replacing the live array. A failed save cannot partially add a playlist.
+    if (!persistence.setlist.save(next).ok) throw new Error('Could not save the setlist. Nothing was added.');
+    items = next;
+    render();
+    return success;
+  }
+  function addLibraryPlaylistToSetlist(id) {
+    return changeLibrary(async () => {
+      const playlist = await persistence.playlists.get(id);
+      if (!playlist.songIds.length) return 'This playlist is empty.';
+      return appendLibrarySongs(playlist.songIds, 'Playlist added to setlist. Songs already there were skipped.');
+    });
   }
   async function migrateSetlistToLibrary() {
     try {
@@ -275,59 +387,46 @@ export function initManokaraController() {
     }
   }
   async function openLibrary() {
+    libraryNotice = '';
+    libraryNoticeError = false;
     await refreshLibrary();
     if (runtime.disposed) return;
-    $('#libraryDialog').showModal();
+    if (!$('#libraryDialog').open) $('#libraryDialog').showModal();
     $('#librarySearch').focus();
   }
   async function addLibrarySong(libraryId) {
-    const song = librarySongs.find(item => item.libraryId === libraryId);
-    if (!song) return;
-    if (items.some(item => item.libraryId === song.libraryId)) {
-      msg('This song is already in the setlist.');
-      return;
-    }
-    const copy = {
-      ...song,
-      librarySync: true
-    };
-    delete copy._L;
-    items.push(copy);
-    const persisted = save();
-    render();
-    $('#libraryDialog').close();
-    if (persisted) msg('Added from My songs.');
+    return changeLibrary(() => appendLibrarySongs([libraryId], 'Added from My songs.'));
   }
   async function removeLibrarySong(libraryId) {
     const song = librarySongs.find(item => item.libraryId === libraryId);
-    if (!song || !confirm(uiText('Remove this song from My songs? Copies already in a setlist will stay there.'))) return;
-    const unlinked = items.map(item => {
-      if (item.libraryId !== libraryId) return item;
-      const copy = {
-        ...item,
-        librarySync: false
-      };
-      delete copy.libraryId;
-      return copy;
-    });
-    // Persist unlinking first, so startup import cannot recreate a deleted song.
-    if (!persistence.setlist.save(unlinked).ok) {
-      msg('Could not save the setlist. The song was kept in My songs.');
-      return;
-    }
-    try {
-      await libraryDelete(song.libraryId);
-      for (const item of new Set([...items, ci])) if (item?.libraryId === song.libraryId) {
-        delete item.libraryId;
-        item.librarySync = false;
+    if (!song || libraryBusy || !confirm(uiText('Remove this song from My songs? Copies already in a setlist will stay there.'))) return false;
+    return changeLibrary(async () => {
+      const unlinked = items.map(item => {
+        if (item.libraryId !== libraryId) return item;
+        const copy = {
+          ...item,
+          librarySync: false
+        };
+        delete copy.libraryId;
+        return copy;
+      });
+      // Persist unlinking first, so startup import cannot recreate a deleted song.
+      if (!persistence.setlist.save(unlinked).ok) {
+        throw new Error('Could not save the setlist. The song was kept in My songs.');
       }
-      save();
-      await refreshLibrary();
-      msg('Removed from My songs. Setlist copies are unchanged.');
-    } catch (error) {
-      save();
-      msg('Could not update My songs. Please try again.');
-    }
+      try {
+        await libraryDelete(song.libraryId);
+        for (const item of new Set([...items, ci])) if (item?.libraryId === song.libraryId) {
+          delete item.libraryId;
+          item.librarySync = false;
+        }
+        save();
+        return 'Removed from My songs. Setlist copies are unchanged.';
+      } catch (error) {
+        save();
+        throw error;
+      }
+    });
   }
   function clearSetlist() {
     if (!confirm(uiText('Remove all songs?'))) return;
@@ -411,7 +510,21 @@ export function initManokaraController() {
   window.ManokaraSetlistActions = appRuntime.commands.actions('setlist');
   runtime.own(appRuntime.commands.bind('library', {
     add: addLibrarySong,
-    remove: removeLibrarySong
+    remove: removeLibrarySong,
+    selectPlaylist: selectLibraryPlaylist,
+    createPlaylist: createLibraryPlaylist,
+    renamePlaylist: renameLibraryPlaylist,
+    deletePlaylist: deleteLibraryPlaylist,
+    addToPlaylist: addSongsToLibraryPlaylist,
+    removeFromPlaylist: removeSongsFromLibraryPlaylist,
+    movePlaylistSong: moveLibraryPlaylistSong,
+    addPlaylist: addLibraryPlaylistToSetlist,
+    refresh() {
+      if (libraryBusy) return false;
+      libraryNotice = '';
+      libraryNoticeError = false;
+      return refreshLibrary();
+    }
   }));
   window.ManokaraLibraryActions = appRuntime.commands.actions('library');
   void migrateSetlistToLibrary();
@@ -1690,6 +1803,7 @@ export function initManokaraController() {
     directChannel?.close();
     directChannel = null;
     persistence.library.close();
+    persistence.playlists.close();
     audioReaction.dispose?.();
     window.removeEventListener('pagehide', pageHidden);
     window.removeEventListener('pageshow', pageShown);
@@ -1711,6 +1825,7 @@ export function initManokaraController() {
   function pageShown(event) {
     if (!event.persisted || runtime.disposed) return;
     runtime.resume();
+    if ($('#libraryDialog').open) void refreshLibrary();
     playback.resume();
     relayScene = null;
     takeRelayOwnership();

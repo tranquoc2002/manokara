@@ -2,6 +2,7 @@ import { isRecord, isSong, normalizeSetlist } from '../domain/song.mjs';
 import { normalizeOutputSettings } from '../domain/lyric-appearance.mjs';
 import { createLocalStorageAdapter, STORAGE_KEYS } from '../adapters/local-storage.mjs';
 import { createSongLibrary } from '../adapters/song-library.mjs';
+import { createPlaylistLibrary } from '../adapters/playlist-library.mjs';
 
 export function createPersistence({ getStorage, getIndexedDB } = {}) {
   const local = createLocalStorageAdapter(getStorage);
@@ -23,7 +24,7 @@ export function createPersistence({ getStorage, getIndexedDB } = {}) {
     load() { return local.readJson(STORAGE_KEYS.overlay, null, isRecord); },
     save(value) { return local.writeJson(STORAGE_KEYS.overlay, value, isRecord); }
   };
-  return { setlist, preferences, layout, library: createSongLibrary(getIndexedDB), local };
+  return { setlist, preferences, layout, library: createSongLibrary(getIndexedDB), playlists: createPlaylistLibrary(getIndexedDB), local };
 }
 
 // A single persistence boundary shared by controller, preferences and Studio.
